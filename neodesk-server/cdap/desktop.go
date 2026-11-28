@@ -180,11 +180,13 @@ func (g *Gateway) StartDesktopSession(ctx context.Context, browserConn *websocke
 		Payload:   data,
 	}
 
+	// The session is known before the device hears of it: a device that
+	// answers at once must not find it missing
+	g.desktopSessions.Store(sessionID, ds)
 	if err := dc.WriteMessage(ctx, msg); err != nil {
+		g.desktopSessions.Delete(sessionID)
 		return nil, fmt.Errorf("send desktop_start to device: %w", err)
 	}
-
-	g.desktopSessions.Store(sessionID, ds)
 
 	log.Printf("[cdap] Desktop session %s started for device %s by %s (%dx%d q%d @%dfps)",
 		sessionID, deviceID, username, width, height, quality, fps)

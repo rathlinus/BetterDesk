@@ -117,12 +117,13 @@ func (g *Gateway) StartTerminalSession(ctx context.Context, browserConn *websock
 		Payload:   data,
 	}
 
+	// The session is known before the device hears of it: a device that
+	// answers at once must not find it missing
+	g.terminalSessions.Store(sessionID, ts)
 	if err := dc.WriteMessage(ctx, msg); err != nil {
+		g.terminalSessions.Delete(sessionID)
 		return nil, fmt.Errorf("send terminal_start to device: %w", err)
 	}
-
-	// Store terminal session in gateway
-	g.terminalSessions.Store(sessionID, ts)
 
 	log.Printf("[cdap] Terminal session %s started for device %s by %s", sessionID, deviceID, username)
 
