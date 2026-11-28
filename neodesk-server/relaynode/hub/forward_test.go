@@ -328,3 +328,33 @@ func TestUDPForwardCarriesEachDatagramsAddress(t *testing.T) {
 		t.Fatalf("node got %v %s %v", f.Type, f.Body, err)
 	}
 }
+
+// checkingStore is the fake store with a ForwardClientChecker that
+// allows only 10.0.0.0/8.
+type checkingStore struct{ *fakestore.Store }
+
+func (checkingStore) ForwardClientAllowed(_ string, ip net.IP) bool {
+	_, lan, _ := net.ParseCIDR("10.0.0.0/8")
+	return lan.Contains(ip)
+}
+
+// TestForwardForAnAddressOutsideTheNodesSiteIsRefused: the store decides
+// which client addresses a node may speak for.
+func TestForwardForAnAddressOutsideTheNodesSiteIsRefused(t *testing.T) {
+	st := fakestore.New()
+	fw := newFakeForwarder()
+	cert := nodeCert(t)
+	h, pin := startHubWith(t, checkingStore{st}, func(c *hub.Config) { c.Forwarder = fw })
+	enrollCert(t, h, st, pin, "tok-outside", cert)
+	_, f := openForward(t, h, pin, cert, wire.ServiceSignal, "198.51.100.4:5000")
+	if code := errCode(t, f); code != wire.CodeBadForward {
+		t.Fatalf("public address of another network: code %q, want bad_forward", code)
+	}
+	_, f = openForward(t, h, pin, cert, wire.ServiceSignal, "10.3.0.5:5000")
+	if f.Type != wire.TypeForwardOK {
+		t.Fatalf("address in the site: got %s %s", f.Type, f.Body)
+	}
+	if fw.count() != 1 {
+		t.Fatalf("forwarder got %d streams, want 1", fw.count())
+	}
+}

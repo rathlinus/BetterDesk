@@ -90,6 +90,9 @@ func (h *Hub) serveForward(tc *tls.Conn, c *wire.Conn, ip, key string, f wire.Fr
 			return
 		}
 		client, err := wire.ParseClientAddr(m.ClientAddr)
+		if err == nil && !h.forwardClientAllowed(nodeID, client) {
+			err = errClientOutsideSite
+		}
 		if err != nil {
 			h.refuseForward(c, ip, nodeID, ForwardRefusedBad, wire.CodeBadForward, err.Error())
 			return
@@ -242,7 +245,7 @@ func (ch *UDPChannel) ReadPacket() (*net.UDPAddr, []byte, error) {
 			continue
 		}
 		client, err := wire.ParseClientAddr(d.Addr)
-		if err != nil {
+		if err != nil || !h.forwardClientAllowed(ch.node, client) {
 			h.countForward(ch.node, func(fc *forwardCounts) { fc.refused(ForwardRefusedBad) })
 			continue
 		}
@@ -362,4 +365,20 @@ func (l *forwardLimits) allowDatagram(node string, ip netip.Addr, now time.Time)
 	okNode := tick(l.dgs, node, now, l.dgPerMinute)
 	okIP := tick(l.dgIPs, ipWindowKey{node, ip}, now, l.dgPerIPMinute)
 	return okNode && okIP
+}
+
+// ForwardClientChecker is optional on Store: whether a node may speak for
+// a computer at an address. Without it every unicast address passes.
+type ForwardClientChecker interface {
+	ForwardClientAllowed(nodeID string, ip net.IP) bool
+}
+
+var errClientOutsideSite = errors.New("the client address is neither private nor in a network of the node's site")
+
+func (h *Hub) forwardClientAllowed(nodeID string, client netip.AddrPort) bool {
+	fc, ok := h.cfg.Store.(ForwardClientChecker)
+	if !ok {
+		return true
+	}
+	return fc.ForwardClientAllowed(nodeID, net.IP(client.Addr().AsSlice()))
 }

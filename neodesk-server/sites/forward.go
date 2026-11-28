@@ -138,3 +138,34 @@ func (s *Service) forwardedSite(snap *snapshot, node *db.RelayNode, deviceID, or
 	}
 	return site, inside, IsPrivate(addr)
 }
+
+// ForwardClientAllowed reports whether a relay node may speak for a
+// computer at ip: a private address, or one in a network of the node's
+// site. A node can't claim the public address of a computer elsewhere,
+// such as a peer of another organization.
+func (s *Service) ForwardClientAllowed(nodeID string, ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if IsPrivate(ip) {
+		return true
+	}
+	snap := s.snapshot()
+	if snap == nil {
+		return false
+	}
+	for siteID, nodes := range snap.nodes {
+		for _, n := range nodes {
+			if n.ID != nodeID {
+				continue
+			}
+			for i := range snap.nets {
+				if snap.nets[i].site.ID == siteID && snap.nets[i].net.Contains(ip) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
+}

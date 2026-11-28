@@ -16,6 +16,12 @@ import (
 
 func startHub(t *testing.T, st *fakestore.Store, mod func(*hub.Config)) (*hub.Hub, string) {
 	t.Helper()
+	return startHubWith(t, st, mod)
+}
+
+// startHubWith is startHub on any store.
+func startHubWith(t *testing.T, st hub.Store, mod func(*hub.Config)) (*hub.Hub, string) {
+	t.Helper()
 	cert, pin, err := hub.LoadOrCreateCert(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

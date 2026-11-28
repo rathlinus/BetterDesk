@@ -133,3 +133,27 @@ func (f *forwardFixture) pinDevice(id, siteID string) {
 		f.t.Fatal(err)
 	}
 }
+
+// TestANodeSpeaksOnlyForComputersAtItsSite: a node may claim private
+// addresses and addresses in its own site's networks, never the public
+// address of a computer elsewhere.
+func TestANodeSpeaksOnlyForComputersAtItsSite(t *testing.T) {
+	f := newForwardFixture(t)
+	c := f.site("org", "C2", "", netSpec{"192.0.2.0/24", public})
+	nc2 := f.node(c.ID, "10.4.0.2:21117", "192.0.2.2:21117")
+	for _, tc := range []struct {
+		node, ip string
+		want     bool
+	}{
+		{f.nodeC, "10.3.0.10", true},
+		{f.nodeC, "fd00::5", true},
+		{f.nodeC, "198.51.100.4", false},
+		{f.nodeC, "192.0.2.5", false},
+		{nc2.ID, "192.0.2.5", true},
+		{"no-such-node", "192.0.2.5", false},
+	} {
+		if got := f.svc.ForwardClientAllowed(tc.node, net.ParseIP(tc.ip)); got != tc.want {
+			t.Errorf("node %s for %s: %v, want %v", tc.node, tc.ip, got, tc.want)
+		}
+	}
+}

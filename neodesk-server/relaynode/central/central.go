@@ -248,6 +248,12 @@ func (g *Glue) ForwardedNodeRoute(initiatorID string, initiatorIP net.IP, initia
 	return signal.NodeRelay{}, false
 }
 
+// ForwardClientAllowed is hub.ForwardClientChecker: a node speaks only
+// for computers at private addresses or in its site's networks.
+func (g *Glue) ForwardClientAllowed(nodeID string, ip net.IP) bool {
+	return g.Sites.ForwardClientAllowed(nodeID, ip)
+}
+
 // ---- hub.Forwarder ----
 
 // ForwardTCP hands a forwarded stream to the signal server.
@@ -298,13 +304,14 @@ func (g *Glue) Audit(event string, fields map[string]string) {
 }
 
 var (
-	_ hub.Store            = (*Glue)(nil)
-	_ hub.SessionOwner     = (*Glue)(nil)
-	_ hub.Events           = (*Glue)(nil)
-	_ hub.ConnectEvents    = (*Glue)(nil)
-	_ hub.ProbeEvents      = (*Glue)(nil)
-	_ hub.Auditor          = (*Glue)(nil)
-	_ signal.SiteRouter    = (*Glue)(nil)
-	_ signal.ForwardRouter = (*Glue)(nil)
-	_ hub.Forwarder        = (*Glue)(nil)
+	_ hub.Store                = (*Glue)(nil)
+	_ hub.SessionOwner         = (*Glue)(nil)
+	_ hub.Events               = (*Glue)(nil)
+	_ hub.ConnectEvents        = (*Glue)(nil)
+	_ hub.ProbeEvents          = (*Glue)(nil)
+	_ hub.Auditor              = (*Glue)(nil)
+	_ signal.SiteRouter        = (*Glue)(nil)
+	_ signal.ForwardRouter     = (*Glue)(nil)
+	_ hub.Forwarder            = (*Glue)(nil)
+	_ hub.ForwardClientChecker = (*Glue)(nil)
 )
