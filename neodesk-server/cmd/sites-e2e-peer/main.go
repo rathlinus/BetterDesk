@@ -10,6 +10,7 @@
 //	sites-e2e-peer online -server H:P -id ID
 //	sites-e2e-peer nattest -server H:P
 //	sites-e2e-peer reach -addr H:P
+//	sites-e2e-peer vpn -db F -site name=group ...
 //
 // setup prepares a central server's data directory before its first
 // start: sites, networks, VPN groups, device pins, one enrollment string
@@ -81,6 +82,8 @@ func main() {
 		fmt.Println(online(*server, *id))
 	case "nattest":
 		natTest(*server)
+	case "vpn":
+		setVPN(*dbPath, siteSpecs)
 	case "reach":
 		c, err := net.DialTimeout("tcp", *addr, 2*time.Second)
 		if err != nil {
@@ -152,6 +155,28 @@ func setup(dbPath, dataDir, control, outDir string, specs, pins multi) {
 		dev, site, _ := strings.Cut(p, "=")
 		if err := svc.SetPin(db.SitePinDevice, dev, byName[site]); err != nil {
 			log.Fatalf("pin %s: %v", p, err)
+		}
+	}
+}
+
+// setVPN sets the VPN group of sites ("name=group"), with central
+// stopped: its sites cache is not told.
+func setVPN(dbPath string, specs multi) {
+	database, err := db.OpenSQLite(dbPath)
+	must(err)
+	defer database.Close()
+	list, err := database.ListSites("", true)
+	must(err)
+	svc := sites.New(database)
+	for _, spec := range specs {
+		name, group, _ := strings.Cut(spec, "=")
+		for _, site := range list {
+			if site.Name == name {
+				if _, err := svc.UpdateSite(site.ID, nil, &group); err != nil {
+					log.Fatal(err)
+				}
+				log.Printf("site %s: VPN group %q", name, group)
+			}
 		}
 	}
 }
