@@ -106,14 +106,16 @@ on_site() { # NET CMD... (one-shot)
 			sh -c "ip route replace default via $(siteprefix "$net").254 && exec \"\$@\"" _ "$@"
 	fi
 }
+# Peer ids must have 6 to 16 characters: computer NAME has id PC<NAME>000
+pcid() { echo "PC${1}000"; }
 computer() { # NAME NET IP ID_SERVER
 	local name=$1 net=$2 ip=$3 server=$4
 	if [ "$net" = siteC ]; then
 		docker run -d --name "$name" --network "$net" --ip "$ip" -v "$WORK/bin:/bin2:ro" e2e-base \
-			/bin2/peer target -server "$server" -id "$name" -key "$KEYPUB" >/dev/null
+			/bin2/peer target -server "$server" -id "$(pcid "$name")" -key "$KEYPUB" >/dev/null
 	else
 		docker run -d --name "$name" --network "$net" --ip "$ip" --cap-add NET_ADMIN -v "$WORK/bin:/bin2:ro" e2e-base \
-			sh -c "ip route replace default via $(siteprefix "$net").254 && exec /bin2/peer target -server $server -id $name -key $KEYPUB" >/dev/null
+			sh -c "ip route replace default via $(siteprefix "$net").254 && exec /bin2/peer target -server $server -id $(pcid "$name") -key $KEYPUB" >/dev/null
 	fi
 }
 
@@ -143,14 +145,16 @@ computer A1 siteA 10.1.0.10 "$CENTRAL:21116"
 computer B1 siteB 10.2.0.10 "$CENTRAL:21116"
 computer C1 siteC 10.3.0.10 "10.3.0.2:21116"
 docker run -d --name NET1 --network wan --ip 198.51.100.50 -v "$WORK/bin:/bin2:ro" e2e-base \
-	/bin2/peer target -server "$CENTRAL:21116" -id NET1 -key "$KEYPUB" >/dev/null
+	/bin2/peer target -server "$CENTRAL:21116" -id "$(pcid NET1)" -key "$KEYPUB" >/dev/null
 sleep 5
 
 # connect NAME NET ID_SERVER TARGET: one session; sets OUT, UUID, RELAY
 N=0
 connect() {
 	N=$((N + 1))
-	local id="INI$1$N" net=$2 server=$3 target=$4
+	local id net=$2 server=$3 target
+	id=$(printf 'INIT%s%04d' "$1" "$N")
+	target=$(pcid "$4")
 	OUT=$(on_site "$net" /bin2/peer connect -server "$server" -id "$id" -target "$target" -key "$KEYPUB")
 	say "    $OUT"
 	UUID=$(printf '%s' "$OUT" | sed -n 's/.*"uuid":"\([^"]*\)".*/\1/p')
@@ -202,7 +206,7 @@ r=$(on_site siteC /bin2/peer reach -addr "$CENTRAL:21116")
 say "    from site C: $r"
 case $r in unreachable*) pass "site C cannot reach central" ;; *) fail "site C reaches central directly" ;; esac
 docker logs C1 2>&1 | grep -q "registered at 10.3.0.2:21116" && pass "C1 registered through node C" || fail "C1 did not register"
-o=$(docker run --rm --network wan -v "$WORK/bin:/bin2:ro" e2e-base /bin2/peer online -server "$CENTRAL:21115" -id C1)
+o=$(docker run --rm --network wan -v "$WORK/bin:/bin2:ro" e2e-base /bin2/peer online -server "$CENTRAL:21115" -id "$(pcid C1)")
 [ "$o" = true ] && pass "C1 shows online at central" || fail "C1 not online at central ($o)"
 nt=$(on_site siteC /bin2/peer nattest -server 10.3.0.2:21115)
 say "    $nt"
@@ -265,7 +269,7 @@ say "== 11. node C stopped: C1 is not handed the central relay"
 docker stop nodeC >/dev/null
 sleep 3
 connect N wan "$CENTRAL:21116" C1
-if printf '%s' "$OUT" | grep -q '"refuse":"' && [ "$(paired_on central)" -eq 0 ]; then
+if printf '%s' "$OUT" | grep -q '"refuse":"Relay temporarily unavailable"' && [ "$(paired_on central)" -eq 0 ]; then
 	pass "node C down: session to C1 refused, nothing on the central relay"
 else
 	fail "node C down: $OUT"
