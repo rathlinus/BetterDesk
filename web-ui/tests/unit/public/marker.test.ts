@@ -15,7 +15,7 @@ function canvasMeasuring(width: (font: string) => number | null) {
 			}
 		};
 		return ctx as unknown as CanvasRenderingContext2D;
-	} as typeof HTMLCanvasElement.prototype.getContext);
+	} as unknown as typeof HTMLCanvasElement.prototype.getContext);
 }
 
 afterEach(() => vi.restoreAllMocks());
