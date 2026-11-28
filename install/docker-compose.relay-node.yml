@@ -35,6 +35,17 @@
 #                                      from outside; default: the host of
 #                                      NODE_LAN_ADDR or NODE_PUBLIC_ADDR
 #                                      with port 21125, "none" for none
+#   NODE_FORWARD=Y                     for a site without internet access:
+#                                      the node also takes the ID server's
+#                                      ports (21115, 21116 TCP and UDP,
+#                                      21118, 21121) for the site's devices
+#                                      and carries them to the central
+#                                      server; devices set the node's LAN
+#                                      address as ID server and the central
+#                                      server's key as key, relay and API
+#                                      empty (default: off)
+#   NODE_FORWARD_LISTEN=192.168.1.20   address the forward ports listen on
+#                                      (default: the host of NODE_LAN_ADDR)
 #   NEODESK_IMAGE_TAG=3.6.56           pin a release (default: latest)
 #
 # Ports the node listens on: 21117 (relay, TCP) and 21119 (relay over
@@ -66,11 +77,15 @@ services:
       - "21117:21117"           # Relay TCP
       - "21119:21119"           # Relay over WebSocket (RELAY_PORT + 2)
       - "21125:21125"           # Legs from other sites' relay nodes (NODE_LEG_PORT)
-      # Later, when the node also takes signalling for the site's devices:
-      # - "21114:21114"         # API
+      # With NODE_FORWARD=Y (a site without internet access) the node
+      # also takes the ID server's ports. Use network_mode: host then, so
+      # the node sees each device's own address; through Docker's
+      # published ports every device would look like the Docker gateway.
       # - "21115:21115"         # NAT type test
       # - "21116:21116/tcp"     # Signal TCP
       # - "21116:21116/udp"     # Signal UDP
+      # - "21118:21118"         # Signal over WebSocket
+      # - "21121:21121"         # API
     volumes:
       - relay-node-data:/opt/neodesk/data
     # Every KEY=value of .env next to this file reaches the node; the
@@ -93,6 +108,10 @@ services:
       # VPN and from outside (default: the hosts above with port 21125)
       - NODE_LEG_LAN_ADDR=${NODE_LEG_LAN_ADDR:-}
       - NODE_LEG_PUBLIC_ADDR=${NODE_LEG_PUBLIC_ADDR:-}
+      # Y: forward the ID server's ports of a site without internet
+      # access to the central server
+      - NODE_FORWARD=${NODE_FORWARD:-}
+      - NODE_FORWARD_LISTEN=${NODE_FORWARD_LISTEN:-}
       - NEODESK_SUPERVISOR=docker
       # Optional: map neodesk to a bind mount's owner. Default 10001.
       - PUID=${PUID:-10001}
