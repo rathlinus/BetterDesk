@@ -154,6 +154,33 @@ func TestAForwardedComputerRegistersWithItsOwnAddress(t *testing.T) {
 	ch.none(t)
 }
 
+// TestAComputerKeepsItsNodeWhenTheNodesConnectionDrops: after node C's
+// UDP connection ends the computer still counts as behind node C, so its
+// sessions stay off the central relay, and nothing is sent to its private
+// address from the server's own socket.
+func TestAComputerKeepsItsNodeWhenTheNodesConnectionDrops(t *testing.T) {
+	srv, _ := newTestSignalServer(t, config.EnrollmentModeOpen)
+	attachTestUDPPair(t, srv) // a direct send would succeed
+	ch := newFakeChannel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		srv.ServeForwardedUDP("node-c", ch)
+	}()
+	from := udpAddr("10.3.0.5", 40000)
+	ch.in <- fwdPacket{addr: from, msg: &pb.RendezvousMessage{Union: &pb.RendezvousMessage_RegisterPeer{RegisterPeer: &pb.RegisterPeer{Id: "SITECPC1"}}}}
+	ch.next(t)
+	ch.Close()
+	<-done
+
+	if got := srv.PeerForwardNode("SITECPC1"); got != "node-c" {
+		t.Fatalf("after the drop the peer comes through %q, want node-c", got)
+	}
+	if srv.sendUDP(&pb.RendezvousMessage{Union: &pb.RendezvousMessage_Hc{Hc: &pb.HealthCheck{}}}, from) {
+		t.Fatal("a datagram to the computer was sent although its node is gone")
+	}
+}
+
 // TestForwardedConnectionsAreRateLimitedByTheComputersAddress: the signal
 // connection limit counts each computer behind a node on its own, not the
 // node's address for all of them.

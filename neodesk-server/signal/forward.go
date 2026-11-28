@@ -224,12 +224,18 @@ func (s *Server) ServeForwardedUDP(nodeID string, ch PacketChannel) {
 	}
 }
 
+// dropUDPForwards forgets the channel of a node's UDP connection that
+// ended. Its computers keep their node until the TTL: they reach nothing
+// else, so their sessions must not move to the central relay, and
+// datagrams to them are dropped instead of sent from this server's
+// socket.
 func (s *Server) dropUDPForwards(ch PacketChannel) {
 	f := &s.fwd
 	f.mu.Lock()
 	for k, e := range f.udp {
 		if e.ch == ch {
-			delete(f.udp, k)
+			e.ch = nil
+			f.udp[k] = e
 		}
 	}
 	f.mu.Unlock()
@@ -245,6 +251,9 @@ func (s *Server) sendForwardedUDP(data []byte, addr *net.UDPAddr) (handled, ok b
 	f.mu.Unlock()
 	if !found || f.now().Sub(e.seen) >= forwardUDPTTL {
 		return false, false
+	}
+	if e.ch == nil {
+		return true, false // the node's connection is down
 	}
 	if err := e.ch.WritePacket(addr, data); err != nil {
 		log.Printf("[signal] UDP send to %s through relay node %s: %v", addr, e.node, err)
