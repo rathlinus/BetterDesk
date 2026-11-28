@@ -216,6 +216,9 @@ type Server struct {
 	// cl reaches peers and connections held by other pods (cluster.go);
 	// nil when the server runs alone.
 	cl *clusterLink
+
+	// fwd is which addresses came through which relay node (forward.go).
+	fwd forwards
 }
 
 // New creates a new signal server instance.
@@ -489,6 +492,7 @@ func (s *Server) Stop() {
 	if s.wsHTTP != nil {
 		s.wsHTTP.Shutdown(context.Background())
 	}
+	s.stopForwards()
 
 	s.wg.Wait()
 	log.Printf("[signal] Stopped")
@@ -1230,12 +1234,18 @@ func (s *Server) sendUDP(msg *pb.RendezvousMessage, addr *net.UDPAddr) bool {
 
 // sendUDPLocal is sendUDP from this pod's socket.
 func (s *Server) sendUDPLocal(msg *pb.RendezvousMessage, addr *net.UDPAddr) bool {
-	if s == nil || s.udpConn == nil || msg == nil || addr == nil {
+	if s == nil || msg == nil || addr == nil {
 		return false
 	}
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		log.Printf("[signal] marshal error: %v", err)
+	data, ok := marshalForUDP(msg)
+	if !ok {
+		return false
+	}
+	// A computer behind a relay node gets its answers through the node
+	if handled, ok := s.sendForwardedUDP(data, addr); handled {
+		return ok
+	}
+	if s.udpConn == nil {
 		return false
 	}
 	if _, err := s.udpConn.WriteToUDP(data, addr); err != nil {
