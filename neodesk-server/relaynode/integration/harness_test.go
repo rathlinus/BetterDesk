@@ -334,6 +334,9 @@ type node struct {
 	legAddr   string // the leg listener
 	logs      *logBuf
 	stop      func()
+	// fwdSignal and fwdNAT are the node's forward listeners (NODE_FORWARD),
+	// "" without forwarding
+	fwdSignal, fwdNAT string
 }
 
 type nodeOpts struct {
@@ -349,6 +352,11 @@ type nodeOpts struct {
 	// legLan and legPublic override the leg addresses the node reports
 	// ("none" for none); both default to its leg listener
 	legLan, legPublic string
+	// forward turns NODE_FORWARD on, with forward listeners on 127.0.0.1;
+	// claim is the computer address the node vouches for (computers
+	// here are all on loopback, which central refuses)
+	forward bool
+	claim   func(net.Addr) string
 }
 
 // startNode enrolls a relay node with a token of the site and waits until
@@ -384,13 +392,21 @@ func (s *server) startNode(siteID string, o *nodeOpts) *node {
 	rcfg.RelayPort = relayPort
 	rcfg.KeyFile = filepath.Join(dataDir, "id_ed25519")
 	logs := &logBuf{}
-	a, err := agent.New(agent.Config{
+	acfg := agent.Config{
 		Join: s.joinString(siteID, controlAddr), DataDir: dataDir,
 		LanAddr: relayAddr, PublicAddr: publicAddr,
 		LegPort: legPort, LegLanAddr: o.legLan, LegPublicAddr: o.legPublic,
 		Relay: rcfg, Version: "integration", Logf: logs.Logf,
 		BackoffMin: 50 * time.Millisecond, BackoffMax: 200 * time.Millisecond,
-	})
+	}
+	if o.forward {
+		acfg.Forward = true
+		acfg.ForwardSignalPort = freePorts(t, []int{-1, 0, 2}, []int{0})
+		acfg.ForwardAPIPort = freePorts(t, []int{0}, nil)
+		acfg.ForwardListen = "127.0.0.1"
+		acfg.ClientAddr = o.claim
+	}
+	a, err := agent.New(acfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +434,13 @@ func (s *server) startNode(siteID string, o *nodeOpts) *node {
 	waitFor(t, "node online at the hub", 5*time.Second, func() bool {
 		return a.NodeID() != "" && s.glue.Hub.Online(a.NodeID())
 	})
-	return &node{id: a.NodeID(), agent: a, relayAddr: relayAddr, relayPort: relayPort, legAddr: fmt.Sprintf("127.0.0.1:%d", legPort), logs: logs, stop: stop}
+	n := &node{id: a.NodeID(), agent: a, relayAddr: relayAddr, relayPort: relayPort, legAddr: fmt.Sprintf("127.0.0.1:%d", legPort), logs: logs, stop: stop}
+	if o.forward {
+		n.fwdSignal, n.fwdNAT = a.ForwardAddr(wire.ServiceSignal), a.ForwardAddr(wire.ServiceNAT)
+		// the UDP forwarding connection is one of the node's streams
+		waitFor(t, "node's UDP forwarding open", 5*time.Second, func() bool { return s.glue.Hub.ForwardedStreams(n.id) >= 1 })
+	}
+	return n
 }
 
 // ---- fake RustDesk peers ----
@@ -444,6 +466,13 @@ func (d device) registerPk() *pb.RegisterPk {
 // (RegisterPeer, then RegisterPk) and returns its UDP socket, where the
 // forwarded RequestRelay arrives.
 func (s *server) registerTarget(d device) *net.UDPConn {
+	s.t.Helper()
+	return s.registerTargetAt(d, s.signalAddr)
+}
+
+// registerTargetAt is registerTarget with the ID server at sigAddr (a
+// node's forward port, or central).
+func (s *server) registerTargetAt(d device, sigAddr string) *net.UDPConn {
 	t := s.t
 	t.Helper()
 	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -451,13 +480,13 @@ func (s *server) registerTarget(d device) *net.UDPConn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	sigAddr, _ := net.ResolveUDPAddr("udp4", s.signalAddr)
+	sigUDP, _ := net.ResolveUDPAddr("udp4", sigAddr)
 	send := func(m *pb.RendezvousMessage) {
 		b, err := proto.Marshal(m)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := c.WriteToUDP(b, sigAddr); err != nil {
+		if _, err := c.WriteToUDP(b, sigUDP); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -494,9 +523,15 @@ func readUDP(t *testing.T, c *net.UDPConn, want func(*pb.RendezvousMessage) bool
 // registers its key on it, so signal knows who sends the RequestRelay that
 // follows on the same connection.
 func (s *server) dialInitiator(d device) net.Conn {
+	s.t.Helper()
+	return s.dialInitiatorAt(d, s.signalAddr)
+}
+
+// dialInitiatorAt is dialInitiator with the ID server at sigAddr.
+func (s *server) dialInitiatorAt(d device, sigAddr string) net.Conn {
 	t := s.t
 	t.Helper()
-	c, err := net.DialTimeout("tcp", s.signalAddr, 3*time.Second)
+	c, err := net.DialTimeout("tcp", sigAddr, 3*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,10 +567,17 @@ type session struct {
 // relay they were told and send RequestRelay{uuid, licence_key}. It
 // returns once the relay carries a byte each way.
 func (s *server) connect(ini, tgt device) *session {
+	s.t.Helper()
+	return s.connectAt(ini, s.signalAddr, tgt, s.signalAddr)
+}
+
+// connectAt is connect with each peer's ID server: central, or the
+// forward port of the node a peer sits behind.
+func (s *server) connectAt(ini device, iniSig string, tgt device, tgtSig string) *session {
 	t := s.t
 	t.Helper()
-	tgtUDP := s.registerTarget(tgt)
-	sig := s.dialInitiator(ini)
+	tgtUDP := s.registerTargetAt(tgt, tgtSig)
+	sig := s.dialInitiatorAt(ini, iniSig)
 	id := uuid.NewString()
 	licence := s.kp.PublicKeyBase64()
 
