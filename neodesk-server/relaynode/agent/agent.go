@@ -58,6 +58,7 @@ type Agent struct {
 	pending map[string]pendingTicket // pushed tickets not started yet
 	revoked bool
 	legs    *legListener // nil while the leg listener is off
+	fwd     *forwarder   // nil while forwarding is off
 
 	upTotal, downTotal atomic.Int64
 }
@@ -185,6 +186,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	defer srv.Stop()
 	if err := a.startLegListener(ctx); err != nil {
+		return err
+	}
+	if err := a.startForward(ctx); err != nil {
 		return err
 	}
 	if a.cfg.Ready != nil {

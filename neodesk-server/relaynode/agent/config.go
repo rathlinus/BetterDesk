@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/neodeskapp/neodesk/neodesk-server/config"
@@ -45,10 +46,26 @@ type Config struct {
 	// until the minute is over.
 	LegsPerMinute    int
 	LegRefusalsLimit int
-	Relay            *config.Config // relay ports and limits (RELAY_PORT, RELAY_MAX_CONNS_IP, ...)
-	Version          string
-	Logf             func(format string, args ...any) // log.Printf when nil
-	Ready            func()                           // called once the relay listens
+	// Forward is NODE_FORWARD=Y: the node forwards the ID server's ports
+	// (signal, NAT test, WebSocket signal, API) of the computers at its
+	// site to central, for a site without internet access (D19).
+	Forward bool
+	// ForwardSignalPort is NODE_FORWARD_SIGNAL_PORT (21116 when 0): TCP
+	// and UDP signal; the NAT test listens one below, WebSocket signal
+	// two above. ForwardAPIPort is NODE_FORWARD_API_PORT (21121 when 0).
+	ForwardSignalPort int
+	ForwardAPIPort    int
+	// ForwardListen is NODE_FORWARD_LISTEN, the host the forward
+	// listeners bind: the host of LanAddr when empty, else every address.
+	ForwardListen string
+	// ClientAddr overrides the computer's address the node sends central
+	// (tests, whose computers are all on loopback); the address as is
+	// when nil.
+	ClientAddr func(net.Addr) string
+	Relay      *config.Config // relay ports and limits (RELAY_PORT, RELAY_MAX_CONNS_IP, ...)
+	Version    string
+	Logf       func(format string, args ...any) // log.Printf when nil
+	Ready      func()                           // called once the relay listens
 
 	StatsInterval time.Duration // 30 s when 0
 	IdleTimeout   time.Duration // 45 s when 0: silence from central ends the connection
@@ -67,18 +84,33 @@ func ConfigFromEnv(getenv func(string) string, relayCfg *config.Config) Config {
 	if err != nil {
 		legPort = wire.DefaultLegPort
 	}
+	fwdSignal, _ := strconv.Atoi(getenv("NODE_FORWARD_SIGNAL_PORT"))
+	fwdAPI, _ := strconv.Atoi(getenv("NODE_FORWARD_API_PORT"))
 	return Config{
-		LegPort:       legPort,
-		LegLanAddr:    getenv("NODE_LEG_LAN_ADDR"),
-		LegPublicAddr: getenv("NODE_LEG_PUBLIC_ADDR"),
-		Join:          getenv("NODE_JOIN"),
-		DataDir:       dataDir,
-		LanAddr:       getenv("NODE_LAN_ADDR"),
-		PublicAddr:    getenv("NODE_PUBLIC_ADDR"),
-		WSLanAddr:     getenv("NODE_WS_LAN_ADDR"),
-		WSPublicAddr:  getenv("NODE_WS_PUBLIC_ADDR"),
-		Relay:         relayCfg,
+		Forward:           envOn(getenv("NODE_FORWARD")),
+		ForwardSignalPort: fwdSignal,
+		ForwardAPIPort:    fwdAPI,
+		ForwardListen:     getenv("NODE_FORWARD_LISTEN"),
+		LegPort:           legPort,
+		LegLanAddr:        getenv("NODE_LEG_LAN_ADDR"),
+		LegPublicAddr:     getenv("NODE_LEG_PUBLIC_ADDR"),
+		Join:              getenv("NODE_JOIN"),
+		DataDir:           dataDir,
+		LanAddr:           getenv("NODE_LAN_ADDR"),
+		PublicAddr:        getenv("NODE_PUBLIC_ADDR"),
+		WSLanAddr:         getenv("NODE_WS_LAN_ADDR"),
+		WSPublicAddr:      getenv("NODE_WS_PUBLIC_ADDR"),
+		Relay:             relayCfg,
 	}
+}
+
+// envOn reads a yes/no variable: Y, yes, true, on or 1 are yes.
+func envOn(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "y", "yes", "true", "on", "1":
+		return true
+	}
+	return false
 }
 
 // Files in the data dir.
