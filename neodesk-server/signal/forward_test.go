@@ -160,14 +160,15 @@ func TestAForwardedComputerRegistersWithItsOwnAddress(t *testing.T) {
 // address from the server's own socket.
 func TestAComputerKeepsItsNodeWhenTheNodesConnectionDrops(t *testing.T) {
 	srv, _ := newTestSignalServer(t, config.EnrollmentModeOpen)
-	attachTestUDPPair(t, srv) // a direct send would succeed
+	// The computer's address is a socket here, so a send from the
+	// server's own socket would arrive
+	_, from := attachTestUDPPair(t, srv)
 	ch := newFakeChannel()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		srv.ServeForwardedUDP("node-c", ch)
 	}()
-	from := udpAddr("10.3.0.5", 40000)
 	ch.in <- fwdPacket{addr: from, msg: &pb.RendezvousMessage{Union: &pb.RendezvousMessage_RegisterPeer{RegisterPeer: &pb.RegisterPeer{Id: "SITECPC1"}}}}
 	ch.next(t)
 	ch.Close()
