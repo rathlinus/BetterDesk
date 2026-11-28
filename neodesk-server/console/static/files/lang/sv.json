@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Relänodens adress avvisad",
     "action_relay_node_unknown_session": "Sessionsrapport från relänod ignorerad",
-    "action_relay_node_legs": "Relänodens anslutningar mellan platser räknade"
+    "action_relay_node_legs": "Relänodens anslutningar mellan platser räknade",
+    "action_relay_node_forwards": "Relänodens vidarebefordrade anslutningar räknade",
+    "action_relay_node_forward_refused": "Relänodens vidarebefordrade anslutning avvisad"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

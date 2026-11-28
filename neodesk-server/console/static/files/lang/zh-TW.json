@@ -2444,7 +2444,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "已拒絕中繼節點位址",
     "action_relay_node_unknown_session": "已忽略中繼節點的工作階段回報",
-    "action_relay_node_legs": "已統計中繼節點的據點間連線"
+    "action_relay_node_legs": "已統計中繼節點的據點間連線",
+    "action_relay_node_forwards": "已統計中繼節點轉送的連線",
+    "action_relay_node_forward_refused": "已拒絕中繼節點轉送的連線"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

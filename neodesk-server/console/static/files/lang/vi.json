@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Đã từ chối địa chỉ nút chuyển tiếp",
     "action_relay_node_unknown_session": "Đã bỏ qua báo cáo phiên của nút chuyển tiếp",
-    "action_relay_node_legs": "Đã đếm kết nối giữa các địa điểm của nút chuyển tiếp"
+    "action_relay_node_legs": "Đã đếm kết nối giữa các địa điểm của nút chuyển tiếp",
+    "action_relay_node_forwards": "Đã đếm kết nối được nút chuyển tiếp chuyển tiếp",
+    "action_relay_node_forward_refused": "Đã từ chối kết nối được nút chuyển tiếp chuyển tiếp"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

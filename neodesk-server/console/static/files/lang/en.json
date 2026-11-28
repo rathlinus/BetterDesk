@@ -2448,7 +2448,9 @@
         "action_site_networks_updated": "Site networks changed",
         "action_relay_node_address_refused": "Relay node address refused",
         "action_relay_node_unknown_session": "Relay node session report ignored",
-        "action_relay_node_legs": "Relay node site to site connections counted"
+        "action_relay_node_legs": "Relay node site to site connections counted",
+        "action_relay_node_forwards": "Relay node forwarded connections counted",
+        "action_relay_node_forward_refused": "Relay node forwarded connection refused"
     },
     "generator": {
         "title": "NeoDesk Support Generator",

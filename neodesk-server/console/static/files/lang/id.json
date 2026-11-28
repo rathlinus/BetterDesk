@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Alamat node relay ditolak",
     "action_relay_node_unknown_session": "Laporan sesi node relay diabaikan",
-    "action_relay_node_legs": "Koneksi antarlokasi node relay dihitung"
+    "action_relay_node_legs": "Koneksi antarlokasi node relay dihitung",
+    "action_relay_node_forwards": "Koneksi yang diteruskan node relay dihitung",
+    "action_relay_node_forward_refused": "Koneksi yang diteruskan node relay ditolak"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Adresa nodului releu a fost refuzată",
     "action_relay_node_unknown_session": "Raportul de sesiune al nodului releu a fost ignorat",
-    "action_relay_node_legs": "Conexiunile între locații ale nodului releu au fost numărate"
+    "action_relay_node_legs": "Conexiunile între locații ale nodului releu au fost numărate",
+    "action_relay_node_forwards": "Conexiunile redirecționate de nodul releu au fost numărate",
+    "action_relay_node_forward_refused": "Conexiunea redirecționată de nodul releu a fost refuzată"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

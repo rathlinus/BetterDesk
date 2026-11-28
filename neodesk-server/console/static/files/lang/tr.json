@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Röle düğümü adresi reddedildi",
     "action_relay_node_unknown_session": "Röle düğümü oturum bildirimi yok sayıldı",
-    "action_relay_node_legs": "Röle düğümünün konumlar arası bağlantıları sayıldı"
+    "action_relay_node_legs": "Röle düğümünün konumlar arası bağlantıları sayıldı",
+    "action_relay_node_forwards": "Röle düğümünün yönlendirdiği bağlantılar sayıldı",
+    "action_relay_node_forward_refused": "Röle düğümünün yönlendirdiği bağlantı reddedildi"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

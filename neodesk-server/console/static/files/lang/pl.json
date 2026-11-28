@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Odrzucono adres węzła przekaźnikowego",
     "action_relay_node_unknown_session": "Zignorowano raport sesji węzła przekaźnikowego",
-    "action_relay_node_legs": "Policzono połączenia węzła przekaźnikowego między lokalizacjami"
+    "action_relay_node_legs": "Policzono połączenia węzła przekaźnikowego między lokalizacjami",
+    "action_relay_node_forwards": "Policzono połączenia przekazane przez węzeł przekaźnikowy",
+    "action_relay_node_forward_refused": "Odrzucono połączenie przekazane przez węzeł przekaźnikowy"
   },
   "generator": {
     "title": "Generator NeoDesk Support",

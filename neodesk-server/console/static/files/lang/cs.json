@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Adresa přenosového uzlu odmítnuta",
     "action_relay_node_unknown_session": "Hlášení relace z přenosového uzlu ignorováno",
-    "action_relay_node_legs": "Spojení přenosového uzlu mezi lokalitami sečtena"
+    "action_relay_node_legs": "Spojení přenosového uzlu mezi lokalitami sečtena",
+    "action_relay_node_forwards": "Přeposlaná spojení přenosového uzlu sečtena",
+    "action_relay_node_forward_refused": "Přeposlané spojení přenosového uzlu odmítnuto"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

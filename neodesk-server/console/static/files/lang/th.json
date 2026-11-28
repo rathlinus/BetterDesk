@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "ปฏิเสธที่อยู่ของโหนดรีเลย์",
     "action_relay_node_unknown_session": "เพิกเฉยรายงานเซสชันของโหนดรีเลย์",
-    "action_relay_node_legs": "นับการเชื่อมต่อระหว่างไซต์ของโหนดรีเลย์แล้ว"
+    "action_relay_node_legs": "นับการเชื่อมต่อระหว่างไซต์ของโหนดรีเลย์แล้ว",
+    "action_relay_node_forwards": "นับการเชื่อมต่อที่โหนดรีเลย์ส่งต่อแล้ว",
+    "action_relay_node_forward_refused": "ปฏิเสธการเชื่อมต่อที่โหนดรีเลย์ส่งต่อ"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

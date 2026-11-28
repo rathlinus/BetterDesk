@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Adressen til relénoden avvist",
     "action_relay_node_unknown_session": "Øktrapport fra relénode ignorert",
-    "action_relay_node_legs": "Relénodens forbindelser mellom steder telt"
+    "action_relay_node_legs": "Relénodens forbindelser mellom steder telt",
+    "action_relay_node_forwards": "Relénodens videresendte forbindelser telt",
+    "action_relay_node_forward_refused": "Relénodens videresendte forbindelse avvist"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

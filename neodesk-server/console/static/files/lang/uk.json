@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Адресу вузла ретрансляції відхилено",
     "action_relay_node_unknown_session": "Звіт про сеанс від вузла ретрансляції проігноровано",
-    "action_relay_node_legs": "Підраховано з'єднання вузла ретрансляції між майданчиками"
+    "action_relay_node_legs": "Підраховано з'єднання вузла ретрансляції між майданчиками",
+    "action_relay_node_forwards": "Підраховано з'єднання, переспрямовані вузлом ретрансляції",
+    "action_relay_node_forward_refused": "З'єднання, переспрямоване вузлом ретрансляції, відхилено"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

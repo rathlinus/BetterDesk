@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Indirizzo del nodo relay rifiutato",
     "action_relay_node_unknown_session": "Segnalazione di sessione del nodo relay ignorata",
-    "action_relay_node_legs": "Connessioni tra sedi del nodo relay conteggiate"
+    "action_relay_node_legs": "Connessioni tra sedi del nodo relay conteggiate",
+    "action_relay_node_forwards": "Connessioni inoltrate dal nodo relay conteggiate",
+    "action_relay_node_forward_refused": "Connessione inoltrata dal nodo relay rifiutata"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

@@ -2444,7 +2444,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Adresse du nœud relais refusée",
     "action_relay_node_unknown_session": "Rapport de session du nœud relais ignoré",
-    "action_relay_node_legs": "Connexions entre sites du nœud relais comptées"
+    "action_relay_node_legs": "Connexions entre sites du nœud relais comptées",
+    "action_relay_node_forwards": "Connexions relayées par le nœud relais comptées",
+    "action_relay_node_forward_refused": "Connexion relayée par le nœud relais refusée"
   },
   "generator": {
     "title": "NeoDesk Support Generator",

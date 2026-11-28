@@ -2447,7 +2447,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "تم رفض عنوان عقدة الترحيل",
     "action_relay_node_unknown_session": "تم تجاهل تقرير جلسة من عقدة الترحيل",
-    "action_relay_node_legs": "تم عدّ اتصالات عقدة الترحيل بين المواقع"
+    "action_relay_node_legs": "تم عدّ اتصالات عقدة الترحيل بين المواقع",
+    "action_relay_node_forwards": "تم عدّ الاتصالات التي مرّرتها عقدة الترحيل",
+    "action_relay_node_forward_refused": "تم رفض اتصال مرّرته عقدة الترحيل"
   },
   "generator": {
     "title": "مولّد وكيل الدعم",

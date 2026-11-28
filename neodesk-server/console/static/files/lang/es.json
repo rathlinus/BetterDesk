@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Dirección del nodo de retransmisión rechazada",
     "action_relay_node_unknown_session": "Informe de sesión del nodo de retransmisión ignorado",
-    "action_relay_node_legs": "Conexiones entre sedes del nodo de retransmisión contadas"
+    "action_relay_node_legs": "Conexiones entre sedes del nodo de retransmisión contadas",
+    "action_relay_node_forwards": "Conexiones reenviadas del nodo de retransmisión contadas",
+    "action_relay_node_forward_refused": "Conexión reenviada del nodo de retransmisión rechazada"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
