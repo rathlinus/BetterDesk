@@ -120,6 +120,12 @@
     With -Node: host:port devices outside the LAN dial the relay at,
     through a port forward (default: none, only LAN devices use the node).
 
+.PARAMETER Forward
+    With -Node, for a site without internet access: the node also takes
+    the ID server's ports (21115, 21116 TCP and UDP, 21118, 21121) for the
+    site's devices and carries them to the central server
+    (NODE_FORWARD=Y). An update keeps it on.
+
 .PARAMETER Help
     Show this help: every parameter, and the environment variables
     ADMIN_PASSWORD, RELAY_SERVERS, RELAY_MODE, POSTGRESQL_URI,
@@ -162,6 +168,11 @@
     Make this machine a relay node of the site the join string names
 
 .EXAMPLE
+    .\neodesk.ps1 -Node -Forward -Join nd1.xxxx
+    A relay node of a site without internet access: the site's devices
+    use it as their ID server
+
+.EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File C:\NeoDesk\neodesk.ps1 -ResetPassword
     A new password for admin, from any elevated window whatever the
     machine's execution policy
@@ -202,6 +213,7 @@ param(
     [string]$Join = "",
     [string]$LanAddr = "",
     [string]$PublicAddr = "",
+    [switch]$Forward,
     [switch]$Help
 )
 
@@ -5607,6 +5619,8 @@ function Do-RelayNode {
     $lan = Get-NodeAddress $(if ($LanAddr) { $LanAddr } elseif ($old["NODE_LAN_ADDR"]) { $old["NODE_LAN_ADDR"] } else { Get-LocalIP })
     $public = if ($PublicAddr) { Get-NodeAddress $PublicAddr } else { [string]$old["NODE_PUBLIC_ADDR"] }
     if (-not $lan -or ($PublicAddr -and -not $public)) { Print-Error "-LanAddr and -PublicAddr take host:port (an IPv6 address in brackets)"; return $false }
+    # Forwarding for a site without internet access stays on once it is
+    $forwarding = $Forward -or ([string]$old["NODE_FORWARD"] -match '^(?i:y|yes|1|true|on)$')
     if (-not (Get-StagedServerBinary)) { return $false }
     $ok = [bool](Select-String -Path $script:STAGED_SERVER_BINARY -Pattern 'NODE_JOIN' -SimpleMatch -Quiet)
     if (-not $ok) { Print-Error "This neodesk-server has no relay node mode yet ($($script:STAGED_SERVER_VERSION))" }
@@ -5615,6 +5629,7 @@ function Do-RelayNode {
     if (-not $ok) { return $false }
     New-Item -ItemType Directory -Path $data -Force | Out-Null
     $environment = @("MODE=node", "NODE_DATA_DIR=$data", "NODE_LAN_ADDR=$lan", "NODE_PUBLIC_ADDR=$public", "NEODESK_SUPERVISOR=windows-service")
+    if ($forwarding) { $environment += "NODE_FORWARD=Y" }
     if (-not $enrolled) { $environment += "NODE_JOIN=$joinValue" }
     if (-not (Set-ServerService -Arguments "node" -Environment $environment -DisplayName "NeoDesk Relay Node" -Description "NeoDesk relay node of a site")) { return $false }
     # Only Administrators, SYSTEM and the node's account read its key
@@ -5624,6 +5639,20 @@ function Do-RelayNode {
             New-NetFirewallRule -DisplayName "NeoDesk relay node - $($rule.Name)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $rule.Port -Profile Any -ErrorAction SilentlyContinue | Out-Null
         }
     }
+    # With forwarding the site's devices reach the ID server's ports here:
+    # NAT test, signal TCP and UDP, signal over WebSocket, API
+    if ($forwarding) {
+        foreach ($rule in @(
+                @{ Name = "forward NAT test"; Port = 21115; Protocol = "TCP" },
+                @{ Name = "forward signal TCP"; Port = 21116; Protocol = "TCP" },
+                @{ Name = "forward signal UDP"; Port = 21116; Protocol = "UDP" },
+                @{ Name = "forward signal over WebSocket"; Port = 21118; Protocol = "TCP" },
+                @{ Name = "forward API"; Port = 21121; Protocol = "TCP" })) {
+            if (-not (Get-NetFirewallRule -DisplayName "NeoDesk relay node - $($rule.Name)" -ErrorAction SilentlyContinue)) {
+                New-NetFirewallRule -DisplayName "NeoDesk relay node - $($rule.Name)" -Direction Inbound -Action Allow -Protocol $rule.Protocol -LocalPort $rule.Port -Profile Any -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
+    }
     Start-Service -Name $script:SERVER_SERVICE -ErrorAction SilentlyContinue
     # The join string is good for one enrollment: it goes once the node has its node.json
     for ($i = 0; $i -lt 30 -and -not $enrolled; $i++) { Start-Sleep -Seconds 1; $enrolled = Test-Path (Join-Path $data "node.json") }
@@ -5631,11 +5660,13 @@ function Do-RelayNode {
     if ((Get-Service -Name $script:SERVER_SERVICE).Status -ne 'Running') { Print-Error "The service $($script:SERVER_SERVICE) did not start; its log: $(Get-ServerLogPath)"; return $false }
     if ($enrolled) { Print-Success "Relay node running (LAN $lan, public $(if ($public) { $public } else { 'none' }))" }
     else { Print-Warning "The relay node runs but has not joined its site yet; its log: $(Get-ServerLogPath)" }
+    if ($forwarding) { Print-Info "The site's devices: ID server $($lan -replace ':\d+$', ''), Key the central server's key, relay and API empty" }
     return $true
 }
 
 function Main {
     # A relay node leaves a server install here alone: nothing below runs
+    if ($Forward -and -not $Node) { Print-Error "-Forward goes with -Node"; exit 1 }
     if ($Node) { exit ([int](-not (Do-RelayNode))) }
 
     # Auto-detect paths on startup

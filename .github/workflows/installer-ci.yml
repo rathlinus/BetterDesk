@@ -278,8 +278,9 @@ jobs:
         run: NEODESK_TEST_BINARY="$RUNNER_TEMP/neodesk-server" bash scripts/test-docker-data-path.sh
 
   # install.sh --node on this runner, next to a stand-in server install:
-  # the unit, env file and state folder of the relay node, the update and
-  # the uninstall, with a stand-in binary until the server has node mode
+  # the unit, env file and state folder of the relay node, --forward with
+  # its firewall ports, the update and the uninstall, with a stand-in
+  # binary until the server has node mode
   relay-node-install:
     name: Relay node install on this runner
     runs-on: ubuntu-latest
@@ -316,11 +317,22 @@ jobs:
           env_file=/etc/neodesk-relay-node/node.env
           state=/var/lib/neodesk-relay-node
           unit=/etc/systemd/system/neodesk-relay-node.service
+          # A stand-in ufw that is on and writes down every change
+          fakebin="$(mktemp -d)"
+          ufw_log="$fakebin/ufw.log"
+          : > "$ufw_log"
+          printf '#!/bin/sh\n[ "$1" = status ] && { echo "Status: active"; exit 0; }\necho "$*" >> %s\n' "$ufw_log" > "$fakebin/ufw"
+          chmod 0755 "$fakebin/ufw"
+          export PATH="$fakebin:$PATH"
 
           help=$(bash install/install.sh --help)
           grep -q -- '--node' <<< "$help" || fail "install.sh --help names no --node"
+          grep -q -- '--forward' <<< "$help" || fail "install.sh --help names no --forward"
           help=$(bash install/neodesk.sh --help)
           grep -q -- '--public-addr' <<< "$help" || fail "neodesk.sh --help names no --public-addr"
+          grep -q -- '--forward' <<< "$help" || fail "neodesk.sh --help names no --forward"
+          if bash install/install.sh --forward; then fail "install.sh --forward without --node went through"; fi
+          if bash install/neodesk.sh --forward; then fail "neodesk.sh --forward without --node went through"; fi
 
           # A server install on the same machine stays as it is
           mkdir -p /opt/neodesk && echo keep > /opt/neodesk/marker
@@ -343,6 +355,8 @@ jobs:
           [ -s "$state/node.json" ] || fail "no node.json"
           [ "$(ps -o user= -p "$(systemctl show -p MainPID --value neodesk-relay-node)")" = neodesk-relay-node ] || fail "the node does not run as neodesk-relay-node"
           [ "$(stat -c '%a %U' /opt/neodesk-relay-node/neodesk-server)" = "755 root" ] || fail "binary owner"
+          if grep -q '^NODE_FORWARD=' "$env_file"; then fail "forwarding is on without --forward"; fi
+          if grep -q '^allow' "$ufw_log"; then fail "a node without --forward opened ports: $(cat "$ufw_log")"; fi
           if command -v systemd-analyze >/dev/null; then
               out=$(systemd-analyze verify "$unit" 2>&1) || fail "systemd-analyze verify: $out"
               if [ -n "$out" ]; then echo "systemd-analyze verify says: $out"; fi
@@ -354,10 +368,26 @@ jobs:
           grep -qx 'NODE_PUBLIC_ADDR=203.0.113.7:443' "$env_file" || fail "the update lost the public address"
           if bash install/install.sh --node --join nd1.eyJ0IjoyfQ; then fail "a second --join on an enrolled node went through"; fi
 
+          # --forward: NODE_FORWARD=Y and the ports of the ID server open for the site's devices
+          bash install/install.sh --node --forward
+          grep -qx 'NODE_FORWARD=Y' "$env_file" || fail "no NODE_FORWARD=Y after --forward"
+          for p in 21115/tcp 21116/tcp 21116/udp 21118/tcp 21121/tcp; do
+              grep -qx "allow $p comment NeoDesk relay node" "$ufw_log" || fail "ufw did not open $p: $(cat "$ufw_log")"
+          done
+          # An update without --forward keeps it on and the ports open
+          : > "$ufw_log"
+          bash install/install.sh --node
+          grep -qx 'NODE_FORWARD=Y' "$env_file" || fail "the update turned forwarding off"
+          grep -qx 'allow 21116/udp comment NeoDesk relay node' "$ufw_log" || fail "the update did not keep 21116/udp open: $(cat "$ufw_log")"
+          grep -qx 'NODE_PUBLIC_ADDR=203.0.113.7:443' "$env_file" || fail "--forward lost the public address"
+
           [ "$before" = "$(sha256sum /etc/systemd/system/neodesk-server.service /opt/neodesk/marker)" ] || fail "the server install was touched"
 
+          : > "$ufw_log"
           bash install/install.sh --node --uninstall
           [ ! -e "$unit" ] && [ ! -e /opt/neodesk-relay-node ] && [ ! -e "$env_file" ] || fail "the uninstall left the unit, binary or env file"
+          # The server install here uses the same ports: they stay open
+          if grep -q '^delete' "$ufw_log"; then fail "the uninstall closed ports the server install uses: $(cat "$ufw_log")"; fi
           [ -s "$state/node.json" ] || fail "the uninstall without --purge removed the key"
           bash install/install.sh --node --uninstall --purge
           [ ! -e "$state" ] || fail "--purge left $state"
@@ -398,13 +428,14 @@ jobs:
             docker compose -f "$file" config --quiet
           done
       # The relay node runs in node mode, publishes the relay's TCP and
-      # WebSocket ports and the leg port and keeps its key in the volume
+      # WebSocket ports and the leg port and keeps its key in the volume;
+      # NODE_FORWARD from .env reaches it
       - name: Check the relay node's compose file
         run: |
           set -euo pipefail
-          config=$(NODE_JOIN=nd1.test docker compose -f install/docker-compose.relay-node.yml config --format json)
+          config=$(NODE_JOIN=nd1.test NODE_FORWARD=Y docker compose -f install/docker-compose.relay-node.yml config --format json)
           jq -e '.services["relay-node"] | .environment.MODE == "node" and .environment.NODE_JOIN == "nd1.test"
-            and .environment.NODE_DATA_DIR == "/opt/neodesk/data"
+            and .environment.NODE_DATA_DIR == "/opt/neodesk/data" and .environment.NODE_FORWARD == "Y"
             and ([.ports[].target] | sort) == [21117, 21119, 21125]
             and ([.volumes[] | select(.target == "/opt/neodesk/data") | .type] == ["volume"])' <<< "$config" >/dev/null \
             || { echo "install/docker-compose.relay-node.yml:"; jq '.services["relay-node"]' <<< "$config"; exit 1; }
