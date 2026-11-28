@@ -1,7 +1,7 @@
 #!/bin/bash
 #===============================================================================
 #
-#   NeoDesk Console Manager v3.6.5 (Docker)
+#   NeoDesk Console Manager v3.6.6 (Docker)
 #
 #   Installs, updates and removes NeoDesk on Docker: one container that
 #   runs the published image ghcr.io/neodeskapp/neodesk (signal,
@@ -20,7 +20,7 @@ fi
 
 set -Eeuo pipefail
 
-VERSION="3.6.5"
+VERSION="3.6.6"
 # Where people ask for help: the NeoDesk Discord
 NEODESK_HELP_URL="https://discord.gg/nwERSawufr"
 # The console's host port when .env names none: 3375 since 3.6.0-rc.5

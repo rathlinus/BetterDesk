@@ -29,7 +29,7 @@ RELEASE_CHANNEL=""
 # An image tag given (--version, NEODESK_VERSION) pins it; without one
 # the install runs latest, the newest release (DECISIONS A163)
 NEODESK_VERSION_GIVEN="${NEODESK_VERSION:-}"
-NEODESK_VERSION="${NEODESK_VERSION:-3.6.5}"
+NEODESK_VERSION="${NEODESK_VERSION:-3.6.6}"
 NEODESK_RAW_BASE="${NEODESK_RAW_BASE:-${NEODESK_BRANCH:+https://raw.githubusercontent.com/${NEODESK_REPO}/${NEODESK_BRANCH}/install}}"
 # The folder this installer runs from, when it is a file (not piped)
 INSTALLER_FOLDER=""
