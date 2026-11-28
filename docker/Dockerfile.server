@@ -63,7 +63,7 @@ FROM alpine:3.22
 LABEL maintainer="neodeskapp"
 LABEL description="NeoDesk Server - RustDesk-compatible signal + relay"
 LABEL org.opencontainers.image.source="https://github.com/neodeskapp/neodesk"
-LABEL version="3.6.6"
+LABEL version="3.6.7"
 
 RUN apk add --no-cache \
     ca-certificates \

@@ -1,7 +1,7 @@
 #!/bin/bash
 #===============================================================================
 #
-#   NeoDesk Console Manager v3.6.6
+#   NeoDesk Console Manager v3.6.7
 #   All-in-One Interactive Tool for Linux
 #
 #   Features:
@@ -39,7 +39,7 @@
 set -e
 
 # Version
-VERSION="3.6.6"
+VERSION="3.6.7"
 # Bump when installer control-flow changes must apply mid-session after Update.
 NEODESK_SH_REVISION="20261125-console-port-3375-309"
 # Where people ask for help: the NeoDesk Discord
