@@ -61,6 +61,7 @@ MANAGED_CONFIG_CHANGES=()
 NODE_JOIN=""
 NODE_LAN_ADDR=""
 NODE_PUBLIC_ADDR=""
+NODE_FORWARD=false
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 
@@ -200,6 +201,10 @@ Options (pass them after "bash -s --"):
                                  (default: the LAN address, port 21117)
   --public-addr HOST:PORT        Relay node: where devices outside the LAN
                                  dial it, through a port forward (default: none)
+  --forward                      Relay node of a site without internet access:
+                                 it also takes the ID server's ports (21115,
+                                 21116 TCP and UDP, 21118, 21121) for the site's
+                                 devices and carries them to the central server
   --migrate-split                Replace a split install (server and console
                                  containers) with the one container, which takes
                                  its data over
@@ -265,6 +270,7 @@ while [ $# -gt 0 ]; do
         --split) die "--split is gone: NeoDesk runs as one container. An existing split install moves with --migrate-split" ;;
         --native) INSTALL_MODE="native"; shift ;;
         --node) INSTALL_MODE="node"; shift ;;
+        --forward) NODE_FORWARD=true; shift ;;
         --join|--lan-addr|--public-addr)
             [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"
             case "$1" in
@@ -868,6 +874,7 @@ node_mode() {
         [ -z "$NODE_JOIN" ] || args+=(--join "$NODE_JOIN")
         [ -z "$NODE_LAN_ADDR" ] || args+=(--lan-addr "$NODE_LAN_ADDR")
         [ -z "$NODE_PUBLIC_ADDR" ] || args+=(--public-addr "$NODE_PUBLIC_ADDR")
+        [ "$NODE_FORWARD" != true ] || args+=(--forward)
         [ "$SKIP_VERIFY" != true ] || args+=(--skip-verify)
         case "$RELEASE_CHANNEL" in
             stable|main) args+=(--channel stable) ;;
@@ -927,9 +934,12 @@ main() {
 
     require_root
 
+    if [ "$NODE_FORWARD" = true ] && [ "$INSTALL_MODE" != node ]; then
+        die "--forward goes with --node"
+    fi
     if [ "$INSTALL_MODE" = node ]; then
         if [ "$CHECK_CAPABILITIES" = true ] || [ "${#MANAGED_CONFIG_CHANGES[@]}" -gt 0 ] || [ "$DO_RESCUE" = true ]; then
-            die "--node takes --join, --lan-addr, --public-addr, --uninstall and --purge only"
+            die "--node takes --join, --lan-addr, --public-addr, --forward, --uninstall and --purge only"
         fi
         node_mode install
         exit 0

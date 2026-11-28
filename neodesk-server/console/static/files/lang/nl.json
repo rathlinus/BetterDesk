@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Adres van relaynode geweigerd",
     "action_relay_node_unknown_session": "Sessiemelding van relaynode genegeerd",
-    "action_relay_node_legs": "Verbindingen tussen locaties van relaynode geteld"
+    "action_relay_node_legs": "Verbindingen tussen locaties van relaynode geteld",
+    "action_relay_node_forwards": "Doorgestuurde verbindingen van relaynode geteld",
+    "action_relay_node_forward_refused": "Doorgestuurde verbinding van relaynode geweigerd"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11231,6 +11233,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "Doorgestuurde apparaten",
+    "forwarded_note": "Doorgestuurde apparaten staan op een locatie zonder internettoegang. Ze bereiken deze server alleen via de relay-node.",
+    "via_node": "Verbindt via",
+    "via_node_value": "Relay-node {name}",
+    "via_node_note": "De locatie heeft geen internettoegang, dus het apparaat bereikt deze server alleen via deze relay-node."
   }
 }

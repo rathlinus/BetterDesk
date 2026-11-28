@@ -1168,7 +1168,7 @@ func (s *Server) handlePunchHoleRequest(msg *pb.PunchHoleRequest, raddr *net.UDP
 	s.storePendingUUID(targetID, raddr, "", initiatorID)
 
 	// If force relay or always use relay
-	if msg.ForceRelay || connection.AlwaysUseRelay || hairpin ||
+	if msg.ForceRelay || connection.AlwaysUseRelay || hairpin || route.ForceRelay ||
 		isLegacyOutboundInitiator(initiatorID) ||
 		s.shouldForceRelayForPeers(initiatorID, targetID) ||
 		s.requiresRelayOnlyCompatibility(targetID) {
@@ -1403,7 +1403,7 @@ func (s *Server) punchHoleRequestTCP(msg *pb.PunchHoleRequest, raddr *net.UDPAdd
 	// PunchHoleResponse), generate their own UUID, and connect to relay with it
 	// — while the target connects with the server's UUID. This broke relay
 	// pairing every time.
-	if msg.ForceRelay || connection.AlwaysUseRelay || hairpin ||
+	if msg.ForceRelay || connection.AlwaysUseRelay || hairpin || route.ForceRelay ||
 		isLegacyOutboundInitiator(initiatorID) ||
 		s.shouldForceRelayForPeers(initiatorID, targetID) ||
 		s.requiresRelayOnlyCompatibility(targetID) {
@@ -2462,8 +2462,10 @@ func (s *Server) handleTestNat(msg *pb.TestNatRequest, raddr net.Addr) *pb.Rende
 	// filling it from GetRelayServers() made newer clients reconnect their
 	// signal socket to the relay port, stop answering punch/relay requests and
 	// fail every session with a relay pair timeout.
+	// A computer behind a relay node can't reach this server's own
+	// addresses: it keeps the node as its ID server (D17)
 	rendezvousServers := s.cfg.GetRendezvousServers()
-	if len(rendezvousServers) > 0 {
+	if len(rendezvousServers) > 0 && s.forwardNode(raddr) == "" {
 		resp.Cu = &pb.ConfigUpdate{
 			Serial:            msg.Serial + 1,
 			RendezvousServers: rendezvousServers,

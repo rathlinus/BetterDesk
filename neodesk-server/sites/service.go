@@ -426,14 +426,20 @@ func (s *Service) Route(initiatorID string, initiatorAddr net.IP, targetID strin
 	if len(as) == 0 || len(bs) == 0 {
 		return NodeRoute{}
 	}
+	single := singleNode(as, bs, live, iSite.ID, tSite.ID, iInside, tInside, iPrivate, tPrivate)
+	return pairOver(snap, live, iSite, tSite, as, bs, iInside, tInside, single)
+}
+
+// pairOver is the Pair of a node of as (the initiator's site) and a node
+// of bs (the target's), A dialing B on every pair first and B dialing A
+// only when no pair works that way; single (carried as the Fallback)
+// when no pair works.
+func pairOver(snap *snapshot, live NodeLiveness, iSite, tSite *db.Site, as, bs []*db.RelayNode, iInside, tInside bool, single NodeRoute) NodeRoute {
 	vpn := iSite.VPNGroup != "" && iSite.VPNGroup == tSite.VPNGroup
 	via := db.SiteNetworkPublic
 	if vpn {
 		via = db.SiteNetworkPrivate
 	}
-	single := singleNode(as, bs, live, iSite.ID, tSite.ID, iInside, tInside, iPrivate, tPrivate)
-	// A dials B on every pair first; B dials A only when no pair works
-	// that way
 	for _, reverse := range []bool{false, true} {
 		for _, a := range as {
 			ia := sameSiteAddr(a, iInside)

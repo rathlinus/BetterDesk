@@ -43,9 +43,9 @@ var setupFlags = []string{
 // setupNodeFlags are the options of neodesk.sh that only qualify --node.
 // The desktop client has a --join of its own, so a call that starts with
 // one of them goes to neodesk-setup only when --node is in it too:
-// `neodesk --join nd1.... --node`. Without --node it stays with the
-// client or the command line.
-var setupNodeFlags = []string{"--join", "--lan-addr", "--public-addr"}
+// `neodesk --join nd1.... --node`, `neodesk --forward --node`. Without
+// --node it stays with the client or the command line.
+var setupNodeFlags = []string{"--join", "--lan-addr", "--public-addr", "--forward"}
 
 // isSetupCall reports whether args, not empty, are a call of the
 // installer's.

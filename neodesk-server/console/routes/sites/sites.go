@@ -49,8 +49,11 @@ type nodeJSON struct {
 	ActiveSessions int        `json:"active_sessions"`
 	BytesUp        int64      `json:"bytes_up"`
 	BytesDown      int64      `json:"bytes_down"`
-	Revoked        bool       `json:"revoked"`
-	RevokedAt      *time.Time `json:"revoked_at"`
+	// ForwardedDevices is how many devices reach the server through the
+	// node now (sites without internet access)
+	ForwardedDevices int        `json:"forwarded_devices"`
+	Revoked          bool       `json:"revoked"`
+	RevokedAt        *time.Time `json:"revoked_at"`
 }
 
 func (h *handlers) nodeOf(n db.RelayNode) nodeJSON {
@@ -61,7 +64,7 @@ func (h *handlers) nodeOf(n db.RelayNode) nodeJSON {
 	return nodeJSON{
 		ID: n.ID, Name: n.Name, SiteID: n.SiteID, Online: live.Online, Version: n.Version,
 		LastSeen: n.LastSeen, CreatedAt: n.CreatedAt, LANAddr: n.LANAddr, PublicAddr: n.PublicAddr,
-		ActiveSessions: live.Active, BytesUp: live.Up, BytesDown: live.Down,
+		ActiveSessions: live.Active, BytesUp: live.Up, BytesDown: live.Down, ForwardedDevices: live.Forwarded,
 		Revoked: n.RevokedAt != nil, RevokedAt: n.RevokedAt,
 	}
 }

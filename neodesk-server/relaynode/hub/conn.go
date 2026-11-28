@@ -13,6 +13,7 @@ type nodeConn struct {
 	nodeID string
 	c      *wire.Conn
 	ip     string
+	key    string // the node's public key (base64), from its client cert
 	hello  wire.Hello
 
 	mu   sync.Mutex

@@ -146,6 +146,19 @@ export function placementKey(source: string | null | undefined): string | null {
 	return null;
 }
 
+/** Whether the open site's node table shows the forwarded devices: a node that works forwards some now */
+export function showsForwarded(
+	nodes: readonly Pick<RelayNode, 'online' | 'revoked' | 'forwarded_devices'>[]
+): boolean {
+	return nodes.some((n) => n.online && !n.revoked && n.forwarded_devices > 0);
+}
+
+/** The relay node a device comes through, as text; null when it reaches the server directly */
+export function viaNodeLabel(via: { id?: string; name?: string } | null | undefined): Keyed | null {
+	const name = via?.name || via?.id || '';
+	return name ? { key: 'sites.via_node_value', params: { name } } : null;
+}
+
 /** A row of the site to site table: a probe from one site's node to another's */
 export interface SiteToSiteRow {
 	key: string;

@@ -8,7 +8,7 @@
 	import type { Folder } from '#lib/api/devices.ts';
 	import { formatBytes, formatDate } from '#lib/i18n/format.ts';
 	import { t, tf } from '#lib/i18n/i18n.svelte.ts';
-	import { placementKey } from '#lib/serverarea/sites.ts';
+	import { placementKey, viaNodeLabel } from '#lib/serverarea/sites.ts';
 	import { can, canWrite } from '#lib/state/session.svelte.ts';
 	import BooleanStatus from '#lib/ui/BooleanStatus.svelte';
 	import Button from '#lib/ui/Button.svelte';
@@ -135,12 +135,15 @@
 	/* The site, on a server that has sites (the answer then has the member) */
 	const hasSite = $derived(device.site !== undefined);
 	const siteSource = $derived(placementKey(device.site_source));
+	/* The relay node it comes through, at a site without internet access */
+	const viaNode = $derived(viaNodeLabel(device.via_node));
 	let pinning = $state(false);
 
 	const networkFacts = $derived<Fact[]>([
 		{ label: t('devices.ip_address'), value: ipValue },
 		{ label: t('device_detail.folder'), value: folderName },
 		...(hasSite ? [{ label: t('sites.site'), value: siteValue }] : []),
+		...(viaNode ? [{ label: t('sites.via_node'), value: viaNodeValue }] : []),
 		...(groupNames.length ? [{ label: t('device_detail.device_groups'), value: groupsValue }] : [])
 	]);
 
@@ -177,6 +180,14 @@
 			<Button size="sm" onclick={() => (pinning = true)}>{t('sites.pin_change')}…</Button>
 		{/if}
 	</span>
+{/snippet}
+{#snippet viaNodeValue()}
+	{#if viaNode}
+		<span class="dp-via">
+			<span>{t(viaNode.key, viaNode.params)}</span>
+			<span class="dp-muted">{t('sites.via_node_note')}</span>
+		</span>
+	{/if}
 {/snippet}
 {#snippet firstSeenValue()}<Time value={device.created_at} relative={false} />{/snippet}
 {#snippet lastSeenValue()}
@@ -302,5 +313,11 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
+	}
+	/* The node's name, the reason under it */
+	.dp-via {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 </style>

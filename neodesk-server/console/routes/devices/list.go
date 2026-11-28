@@ -257,6 +257,8 @@ func (h *handlers) device(w http.ResponseWriter, r *http.Request) {
 		device.Set("site", siteValue(p.Site))
 		device.Set("site_pin", siteValue(p.Pin))
 		device.Set("site_source", p.Source)
+		// The relay node it comes through, at a site without internet access
+		device.Set("via_node", siteValue(p.ViaNode))
 	}
 	answer(w, r, http.StatusOK, withData{Success: true, Data: device})
 }

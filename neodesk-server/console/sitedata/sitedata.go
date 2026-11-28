@@ -70,6 +70,9 @@ type Live struct {
 	Active int
 	Up     int64
 	Down   int64
+	// Forwarded is how many devices reach the server through the node
+	// now (NODE_FORWARD)
+	Forwarded int
 }
 
 // Live returns the node's state at the hub; all zero while relay nodes
@@ -80,7 +83,7 @@ func (s *Service) Live(nodeID string) Live {
 		return Live{}
 	}
 	up, down := g.Hub.Traffic(nodeID)
-	return Live{Online: true, Active: g.Hub.ActiveSessions(nodeID), Up: up, Down: down}
+	return Live{Online: true, Active: g.Hub.ActiveSessions(nodeID), Up: up, Down: down, Forwarded: g.ForwardedDevices(nodeID)}
 }
 
 // Scope is the organizations whose sites an account may see.
@@ -186,12 +189,15 @@ type Placement struct {
 	// Source is "pin" (the device's own pin), "folder" (its folder's
 	// pin), "network" (its address) or "" for no site.
 	Source string `json:"source"`
+	// ViaNode is the relay node the device reaches the server through
+	// (a site without internet access), nil when it reaches it directly.
+	ViaNode *SiteRef `json:"via_node"`
 }
 
 // PlacementOf says where a device is and why. folderID is the device's
 // folder, 0 for none.
 func (s *Service) PlacementOf(deviceID, ip string, folderID int64) Placement {
-	out := Placement{Site: s.DeviceSite(deviceID, ip)}
+	out := Placement{Site: s.DeviceSite(deviceID, ip), ViaNode: s.viaNode(deviceID)}
 	if id, err := s.db.GetSitePin(db.SitePinDevice, deviceID); err == nil && id != "" {
 		if site, err := s.db.GetSite(id); err == nil && site != nil {
 			out.Pin = &SiteRef{ID: site.ID, Name: site.Name}
@@ -209,6 +215,23 @@ func (s *Service) PlacementOf(deviceID, ip string, folderID int64) Placement {
 		out.Source = "network"
 	}
 	return out
+}
+
+// viaNode is the relay node the device comes through now, nil for none.
+func (s *Service) viaNode(deviceID string) *SiteRef {
+	g := s.Glue()
+	if g == nil || g.Signal == nil {
+		return nil
+	}
+	id := g.Signal.PeerForwardNode(deviceID)
+	if id == "" {
+		return nil
+	}
+	name := id
+	if n, err := s.db.GetRelayNode(id); err == nil && n != nil && n.Name != "" {
+		name = n.Name
+	}
+	return &SiteRef{ID: id, Name: name}
 }
 
 func (s *Service) folderPin(folderID int64) string {

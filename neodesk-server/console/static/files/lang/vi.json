@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Đã từ chối địa chỉ nút chuyển tiếp",
     "action_relay_node_unknown_session": "Đã bỏ qua báo cáo phiên của nút chuyển tiếp",
-    "action_relay_node_legs": "Đã đếm kết nối giữa các địa điểm của nút chuyển tiếp"
+    "action_relay_node_legs": "Đã đếm kết nối giữa các địa điểm của nút chuyển tiếp",
+    "action_relay_node_forwards": "Đã đếm kết nối được nút chuyển tiếp chuyển tiếp",
+    "action_relay_node_forward_refused": "Đã từ chối kết nối được nút chuyển tiếp chuyển tiếp"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11237,6 +11239,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "Thiết bị được chuyển tiếp",
+    "forwarded_note": "Thiết bị được chuyển tiếp nằm ở địa điểm không có internet. Chúng chỉ đến được máy chủ này qua nút chuyển tiếp.",
+    "via_node": "Kết nối qua",
+    "via_node_value": "Nút chuyển tiếp {name}",
+    "via_node_note": "Địa điểm của thiết bị không có internet nên nó chỉ đến được máy chủ này qua nút chuyển tiếp này."
   }
 }

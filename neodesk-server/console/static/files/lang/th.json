@@ -2446,7 +2446,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "ปฏิเสธที่อยู่ของโหนดรีเลย์",
     "action_relay_node_unknown_session": "เพิกเฉยรายงานเซสชันของโหนดรีเลย์",
-    "action_relay_node_legs": "นับการเชื่อมต่อระหว่างไซต์ของโหนดรีเลย์แล้ว"
+    "action_relay_node_legs": "นับการเชื่อมต่อระหว่างไซต์ของโหนดรีเลย์แล้ว",
+    "action_relay_node_forwards": "นับการเชื่อมต่อที่โหนดรีเลย์ส่งต่อแล้ว",
+    "action_relay_node_forward_refused": "ปฏิเสธการเชื่อมต่อที่โหนดรีเลย์ส่งต่อ"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11237,6 +11239,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "อุปกรณ์ที่ส่งต่อ",
+    "forwarded_note": "อุปกรณ์ที่ส่งต่ออยู่ที่ไซต์ที่ไม่มีอินเทอร์เน็ต อุปกรณ์เหล่านี้เข้าถึงเซิร์ฟเวอร์นี้ได้ผ่านโหนดรีเลย์เท่านั้น",
+    "via_node": "เชื่อมต่อผ่าน",
+    "via_node_value": "โหนดรีเลย์ {name}",
+    "via_node_note": "ไซต์ของอุปกรณ์นี้ไม่มีอินเทอร์เน็ต จึงเข้าถึงเซิร์ฟเวอร์นี้ได้ผ่านโหนดรีเลย์นี้เท่านั้น"
   }
 }

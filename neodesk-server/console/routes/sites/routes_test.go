@@ -3,19 +3,25 @@ package sites_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	serverconfig "github.com/neodeskapp/neodesk/neodesk-server/config"
 	"github.com/neodeskapp/neodesk/neodesk-server/console/config"
 	"github.com/neodeskapp/neodesk/neodesk-server/console/routes/internal/routetest"
 	"github.com/neodeskapp/neodesk/neodesk-server/db"
+	pb "github.com/neodeskapp/neodesk/neodesk-server/proto"
 	"github.com/neodeskapp/neodesk/neodesk-server/relaynode/agent"
 	"github.com/neodeskapp/neodesk/neodesk-server/relaynode/central"
 	"github.com/neodeskapp/neodesk/neodesk-server/relaynode/wire"
+	"github.com/neodeskapp/neodesk/neodesk-server/signal"
+	"google.golang.org/protobuf/proto"
 )
 
 // The made-up API server's devices: A on a LAN address, B on a public
@@ -67,6 +73,8 @@ func newWorld(t *testing.T, env ...string) *world {
 				return routetest.Reply{Status: 200, Body: `{"id":"A","hostname":"a","ip":"10.1.2.3"}`}
 			case "B":
 				return routetest.Reply{Status: 200, Body: `{"id":"B","hostname":"b","ip":"203.0.113.9:4321"}`}
+			case forwardedID:
+				return routetest.Reply{Status: 200, Body: `{"id":"` + forwardedID + `","hostname":"c","ip":"10.1.2.4"}`}
 			}
 		case strings.HasPrefix(c.Target, "/api/remote-targets"):
 			return routetest.Reply{Status: 200, Body: `{"targets":[]}`}
@@ -532,5 +540,109 @@ func TestTheJoinStringNamesThePublicHost(t *testing.T) {
 	_ = json.Unmarshal([]byte(got.Body), &out)
 	if wantServer := net.JoinHostPort("desk.example.com", strconv.Itoa(glue.ControlPort)); out.Data.Server != wantServer {
 		t.Errorf("server %q, want %q (%s)", out.Data.Server, wantServer, got.Body)
+	}
+}
+
+// fwdChannel is a relay node's UDP forwarding connection into signal: the
+// test puts datagrams in, what signal sends back is dropped.
+type fwdChannel struct {
+	in     chan fwdDatagram
+	closed chan struct{}
+	once   sync.Once
+}
+
+type fwdDatagram struct {
+	from *net.UDPAddr
+	data []byte
+}
+
+func (c *fwdChannel) ReadPacket() (*net.UDPAddr, []byte, error) {
+	select {
+	case d := <-c.in:
+		return d.from, d.data, nil
+	case <-c.closed:
+		return nil, nil, io.EOF
+	}
+}
+
+func (c *fwdChannel) WritePacket(*net.UDPAddr, []byte) error { return nil }
+
+func (c *fwdChannel) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return nil
+}
+
+// forwardedID is the device that comes through a relay node in
+// TestForwardedDevicesAndViaNode.
+const forwardedID = "SITECPC1"
+
+// TestForwardedDevicesAndViaNode: a device that registers through a relay
+// node (a site without internet access) counts in the node's
+// forwarded_devices, and its detail names the node as via_node; a device
+// that reaches the server directly has via_node null.
+func TestForwardedDevicesAndViaNode(t *testing.T) {
+	w := newWorld(t)
+	admin := w.As("admin")
+	office := create(t, admin, `{"name":"Office"}`)
+	glue := w.startHub(t)
+	sig := signal.New(serverconfig.DefaultConfig(), nil, w.data)
+	glue.Signal = sig
+
+	type tokenData struct {
+		Join string `json:"join"`
+	}
+	tok := decode[tokenData](t, admin.Do("POST", "/api/sites/"+office.ID+"/enrollment-tokens", "{}"))
+	a, err := agent.New(agent.Config{Join: tok.Join, DataDir: t.TempDir(), Version: "9.9.9",
+		Logf: t.Logf, BackoffMin: 20 * time.Millisecond, BackoffMax: 100 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() { a.RunControl(ctx); close(stopped) }()
+	t.Cleanup(func() { cancel(); <-stopped })
+	waitFor(t, "the node online", func() bool {
+		s := list(t, admin).Sites
+		return len(s) == 1 && len(s[0].Nodes) == 1 && s[0].Nodes[0].Online
+	})
+	nodeID := a.NodeID()
+	if !strings.Contains(admin.Do("PATCH", "/api/relay-nodes/"+nodeID, `{"name":"Rack 3"}`).Body, `"name":"Rack 3"`) {
+		t.Fatal("rename")
+	}
+	type nodeCount struct {
+		Sites []struct {
+			Nodes []struct {
+				Forwarded int `json:"forwarded_devices"`
+			} `json:"nodes"`
+		} `json:"sites"`
+	}
+	forwarded := func() int {
+		l := decode[nodeCount](t, admin.Do("GET", "/api/sites", ""))
+		return l.Sites[0].Nodes[0].Forwarded
+	}
+	if n := forwarded(); n != 0 {
+		t.Fatalf("forwarded_devices before any device: %d", n)
+	}
+	if body := admin.Do("GET", "/api/devices/"+forwardedID, "").Body; !strings.Contains(body, `"via_node":null`) {
+		t.Errorf("the device before it came through the node: %s", body)
+	}
+
+	// The device registers through the node from its own LAN address
+	ch := &fwdChannel{in: make(chan fwdDatagram, 4), closed: make(chan struct{})}
+	done := make(chan struct{})
+	go func() { sig.ServeForwardedUDP(nodeID, ch); close(done) }()
+	t.Cleanup(func() { ch.Close(); <-done })
+	msg, err := proto.Marshal(&pb.RendezvousMessage{Union: &pb.RendezvousMessage_RegisterPeer{RegisterPeer: &pb.RegisterPeer{Id: forwardedID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch.in <- fwdDatagram{from: &net.UDPAddr{IP: net.ParseIP("10.1.2.4"), Port: 40000}, data: msg}
+	waitFor(t, "the device forwarded by the node", func() bool { return forwarded() == 1 })
+
+	if body := admin.Do("GET", "/api/devices/"+forwardedID, "").Body; !strings.Contains(body, `"via_node":{"id":"`+nodeID+`","name":"Rack 3"}`) {
+		t.Errorf("the forwarded device's detail names no node: %s", body)
+	}
+	if body := admin.Do("GET", "/api/devices/B", "").Body; !strings.Contains(body, `"via_node":null`) {
+		t.Errorf("device B reaches the server directly: %s", body)
 	}
 }

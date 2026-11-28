@@ -149,6 +149,8 @@ export const DeviceDetail = v.looseObject({
 	/** The site the device is pinned to, and where its site comes from ("pin", "folder", "network", "") */
 	site_pin: v.optional(v.nullable(SiteRef)),
 	site_source: v.optional(Str),
+	/** The relay node the device reaches the server through (a site without internet access), null for none */
+	via_node: v.optional(v.nullable(SiteRef)),
 	key_request: v.optional(v.nullable(KeyRequest)),
 	/** It came back with another key, which the server refuses: no session reaches it */
 	key_refused: v.optional(v.boolean(), false)

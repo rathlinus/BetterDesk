@@ -32,6 +32,15 @@ type SiteRouter interface {
 	NodeForAddr(addr, initiatorID string, initiatorIP net.IP, targetID string, targetIP net.IP) (NodeRelay, bool)
 }
 
+// ForwardRouter is optional on SiteRouter: the route of a session in
+// which a peer reaches this server only through a relay node.
+// initiatorNode and targetNode name the node each peer came through, ""
+// for a peer that reaches the server directly. Only those nodes may
+// carry a forwarded peer; ok false means there is no route it can use.
+type ForwardRouter interface {
+	ForwardedNodeRoute(initiatorID string, initiatorIP net.IP, initiatorNode, targetID string, targetIP net.IP, targetNode string) (NodeRelay, bool)
+}
+
 // SetSiteRouter turns relay node routing on; nil turns it off.
 func (s *Server) SetSiteRouter(r SiteRouter) {
 	s.siteMu.Lock()
@@ -70,7 +79,24 @@ func (s *Server) fullNodeRoute(router SiteRouter, req relayRouteRequest) (NodeRe
 	if !ok {
 		return NodeRelay{}, false
 	}
-	route, ok := router.NodeRoute(req.initiatorID, initiatorIP, req.targetID, targetIP)
+	var route NodeRelay
+	if req.fwdA != "" || req.fwdB != "" {
+		initiatorNode, targetNode := req.fwdA, req.fwdB
+		if req.targetIsA {
+			initiatorNode, targetNode = req.fwdB, req.fwdA
+		}
+		fr, can := router.(ForwardRouter)
+		if !can {
+			return NodeRelay{}, false
+		}
+		route, ok = fr.ForwardedNodeRoute(req.initiatorID, initiatorIP, initiatorNode, req.targetID, targetIP, targetNode)
+		if !ok {
+			log.Printf("[signal] no relay node route for %s -> %s, which come through relay nodes %q and %q: refusing the relay",
+				req.initiatorID, req.targetID, initiatorNode, targetNode)
+		}
+	} else {
+		route, ok = router.NodeRoute(req.initiatorID, initiatorIP, req.targetID, targetIP)
+	}
 	if !ok {
 		return NodeRelay{}, false
 	}
@@ -157,6 +183,11 @@ func (s *Server) hintedNodeRoute(router SiteRouter, req relayRouteRequest) (Node
 // whose target dials a node already (relayHint) never moves to the
 // central relay.
 func (s *Server) admitRoute(route *RelayRoute, req relayRouteRequest, relayUUID, initiatorID, targetID string, account int64, consoleSession string) string {
+	if route.Blocked {
+		log.Printf("[signal] relay for uuid=%s refused: %s -> %s has a peer behind a relay node and no node route",
+			relayUUIDShort(relayUUID), initiatorID, targetID)
+		return refuseRelayUnavailable
+	}
 	refuse := s.admitSessionErr(route.Tickets, relayUUID, initiatorID, targetID, account, consoleSession)
 	if refuse.err != nil && errors.Is(refuse.err, relay.ErrTicketsUnavailable) && route.nodeFallback != nil {
 		fb := *route.nodeFallback
@@ -171,6 +202,10 @@ func (s *Server) admitRoute(route *RelayRoute, req relayRouteRequest, relayUUID,
 			relayUUIDShort(relayUUID), route.Via, refuse.err)
 		req.noNodes = true
 		*route = s.chooseRelay(req)
+		if route.Blocked {
+			log.Printf("[signal] relay for uuid=%s refused: a peer behind a relay node can't use the central relay", relayUUIDShort(relayUUID))
+			return refuseRelayUnavailable
+		}
 		refuse = s.admitSessionErr(route.Tickets, relayUUID, initiatorID, targetID, account, consoleSession)
 	}
 	if refuse.reason == "" && relayUUID != "" {

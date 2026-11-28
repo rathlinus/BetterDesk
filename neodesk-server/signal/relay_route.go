@@ -28,6 +28,14 @@ type RelayRoute struct {
 	// the public relay.
 	SameNetwork bool
 	Hairpin     bool
+	// Forwarded is true when a peer reaches this server only through a
+	// relay node (forward.go). Such a session is relayed by that node or
+	// not at all: ForceRelay keeps it from a direct punch (unless both
+	// peers are on one node's network), Blocked means no relay it can
+	// use exists and the session is refused (D18).
+	Forwarded  bool
+	ForceRelay bool
+	Blocked    bool
 	// nodeFallback is the one-node route admitRoute moves a route over
 	// two nodes to when they can't take the tickets.
 	nodeFallback *NodeRelay
@@ -66,6 +74,9 @@ type relayRouteRequest struct {
 	relayHint string
 	// noNodes skips relay nodes (the fallback after a node failed).
 	noNodes bool
+	// fwdA and fwdB are the relay nodes a and b came through, "" for a
+	// peer that reaches this server directly; chooseRelay fills them.
+	fwdA, fwdB string
 }
 
 // chooseRelay picks the relay of a session. Every place that names a relay
@@ -73,6 +84,14 @@ type relayRouteRequest struct {
 // of a cluster, a relay node at a site) is added in one spot.
 func (s *Server) chooseRelay(req relayRouteRequest) RelayRoute {
 	addr, sameNetwork, hairpin := s.selectPeerRelayServer(req.base, req.a, req.b)
+	req.fwdA, req.fwdB = s.forwardNodeUDP(req.a), s.forwardNodeUDP(req.b)
+	forwarded := req.fwdA != "" || req.fwdB != ""
+	if forwarded {
+		// Only peers behind one node share a network: two sites with the
+		// same private range are not one LAN, and no NAT is shared
+		sameNetwork = req.fwdA == req.fwdB && isSameNetwork(req.a, req.b, s.lanNet)
+		hairpin = false
+	}
 	if len(req.policyPeers) > 0 {
 		addr = s.applyNetworkRelayPolicy(addr, req.policyPeers...)
 	}
@@ -83,6 +102,8 @@ func (s *Server) chooseRelay(req relayRouteRequest) RelayRoute {
 		Via:         viaCentral,
 		SameNetwork: sameNetwork,
 		Hairpin:     hairpin,
+		Forwarded:   forwarded,
+		ForceRelay:  forwarded && !sameNetwork,
 	}
 	if sameNetwork && addr != req.base {
 		route.Via = viaLAN
@@ -97,6 +118,9 @@ func (s *Server) chooseRelay(req relayRouteRequest) RelayRoute {
 		route.Addr, route.TargetAddr = node.Addr, node.TargetAddr
 		route.Tickets, route.Via = node.Tickets, node.Via
 		route.nodeFallback = node.Fallback
+	} else if forwarded {
+		// The central relay is out of a forwarded peer's reach
+		route.Blocked = true
 	}
 	return route
 }

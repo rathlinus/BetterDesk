@@ -30,6 +30,9 @@ type Glue struct {
 	Sites   *sites.Service
 	Hub     *hub.Hub // set after hub.New; nil until then
 	Billing Billing  // optional
+	// Signal serves the streams nodes forward (phase 3); nil when the
+	// glue runs without a signal server.
+	Signal *signal.Server
 	// Pin is the SPKI sha256 of the control certificate and ControlPort
 	// the control listener's port, for the enrollment string.
 	Pin         string
@@ -229,6 +232,56 @@ func (g *Glue) NodeForAddr(addr, initiatorID string, initiatorIP net.IP, targetI
 	return signal.NodeRelay{Addr: ia, TargetAddr: ta, Tickets: g.Hub.Tickets(n.ID), Via: "node:" + n.ID}, true
 }
 
+// ForwardedNodeRoute is the relay node route of a session in which a peer
+// reaches this server only through a relay node (D18).
+func (g *Glue) ForwardedNodeRoute(initiatorID string, initiatorIP net.IP, initiatorNode, targetID string, targetIP net.IP, targetNode string) (signal.NodeRelay, bool) {
+	if g.Hub == nil {
+		return signal.NodeRelay{}, false
+	}
+	r := g.Sites.RouteForwarded(initiatorID, initiatorIP, initiatorNode, targetID, targetIP, targetNode)
+	switch r.Kind {
+	case sites.Same:
+		return g.singleRoute(&r)
+	case sites.Pair:
+		return g.pairRoute(r)
+	}
+	return signal.NodeRelay{}, false
+}
+
+// ForwardClientAllowed is hub.ForwardClientChecker: a node speaks only
+// for computers at private addresses or in its site's networks.
+func (g *Glue) ForwardClientAllowed(nodeID string, ip net.IP) bool {
+	return g.Sites.ForwardClientAllowed(nodeID, ip)
+}
+
+// ---- hub.Forwarder ----
+
+// ForwardTCP hands a forwarded stream to the signal server.
+func (g *Glue) ForwardTCP(nodeID, service string, c net.Conn) {
+	if g.Signal == nil {
+		c.Close()
+		return
+	}
+	g.Signal.ServeForwardedTCP(nodeID, service, c)
+}
+
+// ForwardUDP hands a node's UDP forwarding to the signal server.
+func (g *Glue) ForwardUDP(nodeID string, ch *hub.UDPChannel) {
+	if g.Signal == nil {
+		return
+	}
+	g.Signal.ServeForwardedUDP(nodeID, ch)
+}
+
+// ForwardedDevices is how many peers reach this server through the node
+// now (the console's forwarded_devices).
+func (g *Glue) ForwardedDevices(nodeID string) int {
+	if g.Signal == nil {
+		return 0
+	}
+	return g.Signal.ForwardedPeers(nodeID)
+}
+
 // RevokeForPeer drops a banned peer's unclaimed tickets on every node.
 func (g *Glue) RevokeForPeer(peer string) {
 	if g.Hub != nil {
@@ -251,11 +304,14 @@ func (g *Glue) Audit(event string, fields map[string]string) {
 }
 
 var (
-	_ hub.Store         = (*Glue)(nil)
-	_ hub.SessionOwner  = (*Glue)(nil)
-	_ hub.Events        = (*Glue)(nil)
-	_ hub.ConnectEvents = (*Glue)(nil)
-	_ hub.ProbeEvents   = (*Glue)(nil)
-	_ hub.Auditor       = (*Glue)(nil)
-	_ signal.SiteRouter = (*Glue)(nil)
+	_ hub.Store                = (*Glue)(nil)
+	_ hub.SessionOwner         = (*Glue)(nil)
+	_ hub.Events               = (*Glue)(nil)
+	_ hub.ConnectEvents        = (*Glue)(nil)
+	_ hub.ProbeEvents          = (*Glue)(nil)
+	_ hub.Auditor              = (*Glue)(nil)
+	_ signal.SiteRouter        = (*Glue)(nil)
+	_ signal.ForwardRouter     = (*Glue)(nil)
+	_ hub.Forwarder            = (*Glue)(nil)
+	_ hub.ForwardClientChecker = (*Glue)(nil)
 )

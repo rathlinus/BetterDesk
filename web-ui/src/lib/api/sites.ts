@@ -38,6 +38,8 @@ export const RelayNode = v.looseObject({
 	active_sessions: Num,
 	bytes_up: Num,
 	bytes_down: Num,
+	/** How many devices reach the server through the node now (a site without internet access) */
+	forwarded_devices: Num,
 	revoked: BoolLike,
 	revoked_at: Text
 });

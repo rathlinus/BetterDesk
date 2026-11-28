@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Dirección del nodo de retransmisión rechazada",
     "action_relay_node_unknown_session": "Informe de sesión del nodo de retransmisión ignorado",
-    "action_relay_node_legs": "Conexiones entre sedes del nodo de retransmisión contadas"
+    "action_relay_node_legs": "Conexiones entre sedes del nodo de retransmisión contadas",
+    "action_relay_node_forwards": "Conexiones reenviadas del nodo de retransmisión contadas",
+    "action_relay_node_forward_refused": "Conexión reenviada del nodo de retransmisión rechazada"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11231,6 +11233,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "Dispositivos reenviados",
+    "forwarded_note": "Los dispositivos reenviados están en una sede sin acceso a internet. Solo llegan a este servidor a través del nodo de retransmisión.",
+    "via_node": "Se conecta a través de",
+    "via_node_value": "Nodo de retransmisión {name}",
+    "via_node_note": "Su sede no tiene acceso a internet, así que solo llega a este servidor a través de este nodo de retransmisión."
   }
 }

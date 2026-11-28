@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "Indirizzo del nodo relay rifiutato",
     "action_relay_node_unknown_session": "Segnalazione di sessione del nodo relay ignorata",
-    "action_relay_node_legs": "Connessioni tra sedi del nodo relay conteggiate"
+    "action_relay_node_legs": "Connessioni tra sedi del nodo relay conteggiate",
+    "action_relay_node_forwards": "Connessioni inoltrate dal nodo relay conteggiate",
+    "action_relay_node_forward_refused": "Connessione inoltrata dal nodo relay rifiutata"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11231,6 +11233,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "Dispositivi inoltrati",
+    "forwarded_note": "I dispositivi inoltrati si trovano in una sede senza accesso a internet. Raggiungono questo server solo tramite il nodo relay.",
+    "via_node": "Si collega tramite",
+    "via_node_value": "Nodo relay {name}",
+    "via_node_note": "La sua sede non ha accesso a internet, quindi raggiunge questo server solo tramite questo nodo relay."
   }
 }

@@ -232,6 +232,8 @@ func TestWhichCallsGoToNeodeskSetup(t *testing.T) {
 		{"--lan-addr --node", []string{"--lan-addr", "10.0.0.5:21117", "--node"}, false, false, true, &ran{setupCommand, []string{"--lan-addr", "10.0.0.5:21117", "--node"}}, 7},
 		{"--join, the client's", []string{"--join", "https://desk.example.com/join/ABCDEF23"}, true, true, true, nil, 0},
 		{"--lan-addr without --node", []string{"--lan-addr", "10.0.0.5:21117"}, true, true, true, nil, 0},
+		{"--forward --node", []string{"--forward", "--node"}, false, false, true, &ran{setupCommand, []string{"--forward", "--node"}}, 7},
+		{"--forward without --node", []string{"--forward"}, true, true, true, nil, 0},
 	} {
 		var got *ran
 		var stderr strings.Builder

@@ -2440,7 +2440,9 @@
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "릴레이 노드 주소 거부됨",
     "action_relay_node_unknown_session": "릴레이 노드 세션 보고 무시됨",
-    "action_relay_node_legs": "릴레이 노드의 사이트 간 연결 집계됨"
+    "action_relay_node_legs": "릴레이 노드의 사이트 간 연결 집계됨",
+    "action_relay_node_forwards": "릴레이 노드가 전달한 연결 집계됨",
+    "action_relay_node_forward_refused": "릴레이 노드가 전달한 연결 거부됨"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11231,6 +11233,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "전달 중인 장치",
+    "forwarded_note": "전달 중인 장치는 인터넷에 연결되지 않은 사이트에 있습니다. 이 장치는 릴레이 노드를 통해서만 이 서버에 연결됩니다.",
+    "via_node": "연결 경로",
+    "via_node_value": "릴레이 노드 {name}",
+    "via_node_note": "이 장치의 사이트는 인터넷에 연결되지 않아 이 릴레이 노드를 통해서만 이 서버에 연결됩니다."
   }
 }

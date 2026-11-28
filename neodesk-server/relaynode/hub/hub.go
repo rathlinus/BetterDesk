@@ -47,6 +47,16 @@ type Config struct {
 	EnrollPerMinute int           // per remote IP; DefaultEnrollPerMinute when 0
 	AuditInterval   time.Duration // DefaultAuditInterval when 0
 	Now             func() time.Time
+
+	// Forwarder takes the streams nodes forward for the computers at
+	// their sites (phase 3); nil refuses them.
+	Forwarder Forwarder
+	// Limits of forwarded traffic (D20); the Default* values when 0.
+	ForwardPerMinute     int
+	ForwardOpenMax       int
+	ForwardPerIPMinute   int
+	DatagramsPerMinute   int
+	DatagramsPerIPMinute int
 }
 
 // Hub accepts relay node connections and keeps the connected ones.
@@ -63,6 +73,8 @@ type Hub struct {
 	nodes    map[string]*nodeState
 	sessions map[string]string // ticket uuid -> node id
 	enroll   map[string]*window
+
+	fwd *forwardLimits
 }
 
 type nodeState struct {
@@ -76,6 +88,10 @@ type nodeState struct {
 	tickets  map[string]*ticket
 	counts   ticketCounts
 	legs     legTotals
+	// forwards are the node's open forward connections, closed when the
+	// node is revoked; fwdCounts its forwards since the last audit
+	forwards  map[net.Conn]struct{}
+	fwdCounts forwardCounts
 }
 
 type ticket struct {
@@ -146,6 +162,7 @@ func New(cfg Config) (*Hub, error) {
 		nodes:    make(map[string]*nodeState),
 		sessions: make(map[string]string),
 		enroll:   make(map[string]*window),
+		fwd:      newForwardLimits(cfg),
 	}, nil
 }
 
@@ -188,6 +205,7 @@ func (h *Hub) Stop() {
 		if n.conn != nil {
 			conns = append(conns, n.conn)
 		}
+		n.closeForwardsLocked()
 	}
 	h.mu.Unlock()
 	for _, c := range conns {
@@ -253,6 +271,10 @@ func (h *Hub) serve(raw net.Conn) {
 	}
 	c := wire.NewConn(tc)
 	f, err := c.Read(handshakeTimeout)
+	if err == nil && (f.Type == wire.TypeForwardTCP || f.Type == wire.TypeForwardUDP) {
+		h.serveForward(tc, c, ip, wire.PublicKeyBase64(key), f)
+		return
+	}
 	if err != nil || f.Type != wire.TypeHello {
 		h.refuse(c, ip, "", wire.CodeBadHello, "the first frame must be hello")
 		return
@@ -274,7 +296,7 @@ func (h *Hub) serve(raw net.Conn) {
 	if err := h.cfg.Store.UpdateRelayNodeState(node.ID, hello.Version, hello.LanAddr, hello.PublicAddr, h.cfg.Now()); err != nil {
 		h.cfg.Logf("[nodes] node %s: save state: %v", node.ID, err)
 	}
-	nc := &nodeConn{h: h, nodeID: node.ID, c: c, ip: ip, hello: hello, acks: make(map[uint64]chan wire.Ack), done: make(chan struct{})}
+	nc := &nodeConn{h: h, nodeID: node.ID, c: c, ip: ip, key: wire.PublicKeyBase64(key), hello: hello, acks: make(map[uint64]chan wire.Ack), done: make(chan struct{})}
 	h.register(nc, node.SiteID)
 	h.cfg.Logf("[nodes] Node %s (%s) connected from %s, version %s", node.ID, node.Name, ip, hello.Version)
 	nc.run()
@@ -457,6 +479,7 @@ func (h *Hub) Disconnect(nodeID string) {
 	var nc *nodeConn
 	if n := h.nodes[nodeID]; n != nil {
 		nc = n.conn
+		n.closeForwardsLocked()
 		for id, t := range n.tickets {
 			if !t.live {
 				delete(n.tickets, id)
@@ -585,13 +608,36 @@ func (h *Hub) flushAudit() {
 		c  ticketCounts
 	}
 	var rows []row
+	type fwdRow struct {
+		id string
+		c  forwardCounts
+	}
+	var fwdRows []fwdRow
 	for id, n := range h.nodes {
 		if n.counts.pushed > 0 || n.counts.legsAccepted > 0 || len(n.counts.legsRefused) > 0 {
 			rows = append(rows, row{id, n.counts})
 			n.counts = ticketCounts{}
 		}
+		if !n.fwdCounts.empty() {
+			fwdRows = append(fwdRows, fwdRow{id, n.fwdCounts})
+			n.fwdCounts = forwardCounts{}
+		}
 	}
 	h.mu.Unlock()
+	for _, r := range fwdRows {
+		fields := map[string]string{"node_id": r.id, "datagrams": strconv.FormatInt(r.c.datagrams, 10)}
+		var streams, refused int64
+		for service, n := range r.c.tcp {
+			fields["tcp_"+service] = strconv.FormatInt(n, 10)
+			streams += n
+		}
+		for reason, n := range r.c.refusedBy {
+			fields["refused_"+reason] = strconv.FormatInt(n, 10)
+			refused += n
+		}
+		h.audit("relay_node.forwards", fields)
+		h.cfg.Logf("[nodes] Node %s forwarded %d streams and %d datagrams, refused %d", r.id, streams, r.c.datagrams, refused)
+	}
 	for _, r := range rows {
 		if r.c.legsAccepted > 0 || len(r.c.legsRefused) > 0 {
 			fields := map[string]string{"node_id": r.id, "accepted": strconv.FormatInt(r.c.legsAccepted, 10)}

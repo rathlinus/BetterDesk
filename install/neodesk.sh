@@ -192,6 +192,9 @@ NODE_MODE=false
 NODE_JOIN="${NODE_JOIN:-}"
 NODE_LAN_ADDR="${NODE_LAN_ADDR:-}"
 NODE_PUBLIC_ADDR="${NODE_PUBLIC_ADDR:-}"
+# --forward: the node also carries the ID server's ports of a site without
+# internet access to the central server (NODE_FORWARD=Y)
+NODE_FORWARD=false
 # The release key (DECISIONS A152): the public half of the ed25519 key
 # that signs each release's manifest. A binary with verify-release carries
 # the same key; without one, openssl checks a download with this copy.
@@ -277,6 +280,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --node)
             NODE_MODE=true
+            shift
+            ;;
+        --forward)
+            NODE_FORWARD=true
             shift
             ;;
         --join|--lan-addr|--public-addr)
@@ -370,6 +377,9 @@ while [[ $# -gt 0 ]]; do
             echo "                   LAN address, port 21117)"
             echo "  --public-addr H:P  Where devices outside the LAN dial it, through a port forward"
             echo "                   (default: none, only LAN devices use the node)"
+            echo "  --forward        With --node, for a site without internet access: the node also takes"
+            echo "                   the ID server's ports (21115, 21116 TCP and UDP, 21118, 21121) for the"
+            echo "                   site's devices and carries them to the central server (NODE_FORWARD=Y)"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Environment variables:"
@@ -406,6 +416,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$NODE_FORWARD" = true ] && [ "$NODE_MODE" != true ]; then
+    echo "ERROR: --forward goes with --node"
+    exit 1
+fi
 
 # Go server source directory
 GO_SERVER_SOURCE="$REPO_DIR/neodesk-server"
@@ -8386,7 +8401,12 @@ do_node_install() {
     _upsert_env_line "$NODE_ENV_FILE" NODE_LAN_ADDR "$lan"
     _upsert_env_line "$NODE_ENV_FILE" NODE_PUBLIC_ADDR "$public"
     [ -z "$NODE_JOIN" ] || _upsert_env_line "$NODE_ENV_FILE" NODE_JOIN "$NODE_JOIN"
+    [ "$NODE_FORWARD" != true ] || _upsert_env_line "$NODE_ENV_FILE" NODE_FORWARD Y
     print_success "Settings in $NODE_ENV_FILE (LAN $lan, public ${public:-none})"
+    # An update keeps forwarding on and its ports open
+    if node_forwards; then
+        open_node_forward_ports
+    fi
 
     write_node_unit
     systemctl daemon-reload
@@ -8421,8 +8441,86 @@ do_node_install() {
     print_info "Devices reach the relay on TCP 21117 and 21119 (WebSocket): open both towards them,"
     print_info "and TCP 21125 towards the relay nodes of your other sites (over the VPN or forwarded),"
     print_info "and forward them from the public address when there is one"
+    if node_forwards; then
+        print_info "The site's devices: ID server ${lan%:*}, Key the central server's key, relay and API empty"
+    fi
     print_info "Update: run this again without --join. Remove: --node --uninstall (--purge also its key)"
     return 0
+}
+
+# node_forwards: the node's env file turns forwarding on (NODE_FORWARD)
+node_forwards() {
+    case "$(env_file_value "$NODE_ENV_FILE" NODE_FORWARD | tr '[:upper:]' '[:lower:]')" in
+        y|yes|1|true|on) return 0 ;;
+    esac
+    return 1
+}
+
+# node_forward_ports: the ports the node listens on with NODE_FORWARD=Y,
+# one PORT/PROTO a line: the NAT test (signal port - 1), signal TCP and
+# UDP, signal over WebSocket (signal port + 2) and the API
+node_forward_ports() {
+    local signal api
+    signal=$(env_file_value "$NODE_ENV_FILE" NODE_FORWARD_SIGNAL_PORT)
+    api=$(env_file_value "$NODE_ENV_FILE" NODE_FORWARD_API_PORT)
+    [[ "$signal" =~ ^[0-9]+$ ]] && [ "$signal" -gt 1 ] || signal=21116
+    [[ "$api" =~ ^[0-9]+$ ]] && [ "$api" -gt 0 ] || api=21121
+    printf '%s\n' "$((signal - 1))/tcp" "$signal/tcp" "$signal/udp" "$((signal + 2))/tcp" "$api/tcp"
+}
+
+# open_node_forward_ports: opens node_forward_ports in ufw or firewalld
+# when one of them is active, with iptables when neither is installed, as
+# configure_firewall_rules does for a server
+open_node_forward_ports() {
+    local entries entry created=0
+    mapfile -t entries < <(node_forward_ports)
+    if ufw_active; then
+        for entry in "${entries[@]}"; do
+            ufw allow "$entry" comment "NeoDesk relay node" >/dev/null 2>&1 && created=$((created + 1))
+        done
+    elif command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld 2>/dev/null; then
+        for entry in "${entries[@]}"; do
+            firewall-cmd --permanent --add-port="$entry" >/dev/null 2>&1 && created=$((created + 1))
+        done
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    elif iptables_is_the_firewall; then
+        for entry in "${entries[@]}"; do
+            iptables -C INPUT -p "${entry#*/}" --dport "${entry%/*}" -j ACCEPT 2>/dev/null \
+                || iptables -A INPUT -p "${entry#*/}" --dport "${entry%/*}" -j ACCEPT 2>/dev/null
+            created=$((created + 1))
+        done
+        if command -v iptables-save &>/dev/null; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || \
+            iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
+        fi
+    fi
+    if [ "$created" -gt 0 ]; then
+        print_success "Open for the site's devices: ${entries[*]}"
+    else
+        print_info "The site's devices reach the node on: ${entries[*]}"
+    fi
+}
+
+# close_node_forward_ports: closes what open_node_forward_ports opened,
+# unless a server install here uses the same ports
+close_node_forward_ports() {
+    local entries entry
+    [ ! -f /etc/systemd/system/neodesk-server.service ] || return 0
+    mapfile -t entries < <(node_forward_ports)
+    if ufw_active; then
+        for entry in "${entries[@]}"; do
+            ufw delete allow "$entry" >/dev/null 2>&1 || true
+        done
+    elif command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld 2>/dev/null; then
+        for entry in "${entries[@]}"; do
+            firewall-cmd --permanent --remove-port="$entry" >/dev/null 2>&1 || true
+        done
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    elif iptables_is_the_firewall; then
+        for entry in "${entries[@]}"; do
+            while iptables -D INPUT -p "${entry#*/}" --dport "${entry%/*}" -j ACCEPT 2>/dev/null; do :; done
+        done
+    fi
 }
 
 # do_node_uninstall: removes the relay node; its key and enrollment stay
@@ -8435,6 +8533,10 @@ do_node_uninstall() {
         return 0
     fi
     systemctl disable --now "$NODE_SERVICE" 2>/dev/null || true
+    # Before the env file goes: it says whether forwarding was on
+    if node_forwards; then
+        close_node_forward_ports
+    fi
     rm -f "$NODE_UNIT"
     systemctl daemon-reload 2>/dev/null || true
     rm -rf -- "${NODE_INSTALL_DIR:?}" "${NODE_ENV_DIR:?}"
