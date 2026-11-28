@@ -22,6 +22,14 @@ type NodeLiveness interface {
 	ActiveSessions(nodeID string) int
 }
 
+// NodeLegs is optional on NodeLiveness: where other nodes reach a node's
+// leg listener, on the LAN (or a VPN) and from outside, "" for none. With
+// it, Route dials leg addresses; without it (tests of routing alone) the
+// nodes' relay addresses stand in for them.
+type NodeLegs interface {
+	LegAddrs(nodeID string) (lan, public string)
+}
+
 // deviceCacheTTL is how long the organization and the folder of a device
 // are kept. Both change outside this service, so they expire instead of
 // being invalidated.
@@ -345,9 +353,18 @@ type NodeRoute struct {
 	// private, else its public address.
 	InitiatorAddr string
 	TargetAddr    string
-	// Dial is where A reaches B (Pair only): B's LAN address when both
-	// sites have the same VPN group, else B's public address.
-	Dial string
+	// Dial is where the dialing node reaches the other one's leg
+	// listener (Pair only): its LAN address when both sites have the same
+	// VPN group, else its public address. DialVia says which ("private"
+	// or "public").
+	Dial    string
+	DialVia string
+	// Reverse: B dials A at Dial, because the probes say A can't reach B
+	// but B reaches A (Pair only).
+	Reverse bool
+	// Fallback is the one-node route to use when the pair's tickets can't
+	// be pushed (Pair only; nil when no node serves both peers).
+	Fallback *NodeRoute
 }
 
 // Route picks the nodes that relay a connection from the initiator to the
@@ -356,10 +373,13 @@ type NodeRoute struct {
 //   - Both at the same site with an online node: Same, the node with the
 //     fewest active sessions (ties by id) that has an address for both.
 //   - At different sites of the same organization, both with online nodes:
-//     Pair. When no pair of nodes works (an address missing, or a probe
-//     said A can't reach B), one node both peers reach: a peer reaches a
-//     node of its own site by the same rule as above, and a node of the
-//     other site at its public address when its own address is public.
+//     Pair. A dials B's leg listener, or B dials A's when the probes say
+//     only that way works. When no pair of nodes works (an address
+//     missing, or the probes said neither node reaches the other), one
+//     node both peers reach: a peer reaches a node of its own site by the
+//     same rule as above, and a node of the other site at its public
+//     address when its own address is public. A Pair carries that node as
+//     its Fallback.
 //   - Anything else, and always for peers of different organizations: None.
 func (s *Service) Route(initiatorID string, initiatorAddr net.IP, targetID string, targetAddr net.IP) NodeRoute {
 	if initiatorID == "" || targetID == "" {
@@ -411,29 +431,45 @@ func (s *Service) Route(initiatorID string, initiatorAddr net.IP, targetID strin
 	if vpn {
 		via = db.SiteNetworkPrivate
 	}
-	for _, a := range as {
-		ia := sameSiteAddr(a, iInside)
-		if ia == "" {
-			continue
-		}
-		for _, b := range bs {
-			ta := sameSiteAddr(b, tInside)
-			dial := b.PublicAddr
-			if vpn {
-				dial = b.LANAddr
-			}
-			if ta == "" || dial == "" || snap.failed[[3]string{a.ID, b.ID, via}] {
+	single := singleNode(as, bs, live, iSite.ID, tSite.ID, iInside, tInside, iPrivate, tPrivate)
+	// A dials B on every pair first; B dials A only when no pair works
+	// that way
+	for _, reverse := range []bool{false, true} {
+		for _, a := range as {
+			ia := sameSiteAddr(a, iInside)
+			if ia == "" {
 				continue
 			}
-			return NodeRoute{Kind: Pair, A: a, B: b, InitiatorAddr: ia, TargetAddr: ta, Dial: dial}
+			for _, b := range bs {
+				ta := sameSiteAddr(b, tInside)
+				dialer, acceptor := a, b
+				if reverse {
+					dialer, acceptor = b, a
+				}
+				dial := legAddr(live, acceptor, vpn)
+				if ta == "" || dial == "" || snap.failed[[3]string{dialer.ID, acceptor.ID, via}] {
+					continue
+				}
+				r := NodeRoute{Kind: Pair, A: a, B: b, InitiatorAddr: ia, TargetAddr: ta, Dial: dial, DialVia: via, Reverse: reverse}
+				if single.Kind == Same {
+					fb := single
+					r.Fallback = &fb
+				}
+				return r
+			}
 		}
 	}
+	return single
+}
 
+// singleNode is the node of either site that both peers reach, the least
+// loaded first; None when there is none.
+func singleNode(as, bs []*db.RelayNode, live NodeLiveness, iSite, tSite string, iInside, tInside, iPrivate, tPrivate bool) NodeRoute {
 	both := append(append([]*db.RelayNode{}, as...), bs...)
 	sortByLoad(both, live)
 	for _, n := range both {
-		ia := reachAddr(n, iSite.ID, iInside, iPrivate)
-		ta := reachAddr(n, tSite.ID, tInside, tPrivate)
+		ia := reachAddr(n, iSite, iInside, iPrivate)
+		ta := reachAddr(n, tSite, tInside, tPrivate)
 		if ia != "" && ta != "" {
 			return NodeRoute{Kind: Same, A: n, InitiatorAddr: ia, TargetAddr: ta}
 		}
@@ -492,6 +528,19 @@ func (s *Service) NodeForAddr(initiatorID string, initiatorIP net.IP, targetID s
 		}
 	}
 	return nil, "", "", false
+}
+
+// legAddr is where another node reaches n's leg listener: over the VPN
+// (its LAN address) or from outside (its public one).
+func legAddr(live NodeLiveness, n *db.RelayNode, vpn bool) string {
+	lan, public := n.LANAddr, n.PublicAddr
+	if legs, ok := live.(NodeLegs); ok {
+		lan, public = legs.LegAddrs(n.ID)
+	}
+	if vpn {
+		return lan
+	}
+	return public
 }
 
 // onlineNodes returns copies of the site's online nodes, fewest active

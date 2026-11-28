@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import type { RelayNode, Site } from '../../../src/lib/api/sites.ts';
+import type { Reachability, RelayNode, Site } from '../../../src/lib/api/sites.ts';
 import {
 	guessKind,
+	hasSiteToSite,
 	networkRows,
 	networksChanged,
 	networksToSave,
@@ -12,6 +13,7 @@ import {
 	relayLabel,
 	rowOfSentIndex,
 	siteSummary,
+	siteToSiteRows,
 	sortNodes
 } from '../../../src/lib/serverarea/sites.ts';
 
@@ -169,5 +171,50 @@ describe('session relay', () => {
 		expect(relayLabel({})).toBeNull();
 		expect(relayLabel({ kind: 'odd' })).toBeNull();
 		expect(relayLabel({ kind: 'node', nodes: [] })).toBeNull();
+	});
+});
+
+describe('site to site', () => {
+	const sites = [
+		site({ id: 's-b', name: 'Hamburg', nodes: [node({ id: 'n-b', name: 'hh-1', site_id: 's-b' })] }),
+		site({
+			id: 's-a',
+			name: 'Berlin',
+			nodes: [
+				node({ id: 'n-a', name: 'ber-1', site_id: 's-a' }),
+				node({ id: 'n-a2', name: '', site_id: 's-a' })
+			]
+		})
+	];
+	const probe = (from: string, to: string, over: Partial<Reachability> = {}): Reachability => ({
+		from,
+		to,
+		via: 'public',
+		ok: true,
+		rtt_ms: 4,
+		checked_at: '2026-11-28T10:00:00Z',
+		...over
+	});
+
+	test('names both ends by site and node, sorted by site', () => {
+		const rows = siteToSiteRows(sites, [
+			probe('n-b', 'n-a', { ok: false, via: 'private' }),
+			probe('n-a', 'n-b', { rtt_ms: 12 })
+		]);
+		expect(rows.map((r) => [r.fromSite, r.fromNode, r.toSite, r.toNode, r.via, r.ok, r.rttMs])).toEqual([
+			['Berlin', 'ber-1', 'Hamburg', 'hh-1', 'public', true, 12],
+			['Hamburg', 'hh-1', 'Berlin', 'ber-1', 'private', false, 4]
+		]);
+	});
+
+	test('leaves out probes inside one site and of unknown nodes; a nameless node shows its id', () => {
+		const rows = siteToSiteRows(sites, [probe('n-a', 'n-a2'), probe('n-a', 'n-gone'), probe('n-a2', 'n-b')]);
+		expect(rows.map((r) => r.key)).toEqual(['n-a2|n-b|public']);
+		expect(rows[0]?.fromNode).toBe('n-a2');
+	});
+
+	test('shows only when two sites have nodes that are not revoked', () => {
+		expect(hasSiteToSite(sites)).toBe(true);
+		expect(hasSiteToSite([sites[0]!, site({ id: 's-c', nodes: [node({ revoked: true })] })])).toBe(false);
 	});
 });

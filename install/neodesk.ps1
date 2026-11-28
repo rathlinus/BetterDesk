@@ -5619,7 +5619,7 @@ function Do-RelayNode {
     if (-not (Set-ServerService -Arguments "node" -Environment $environment -DisplayName "NeoDesk Relay Node" -Description "NeoDesk relay node of a site")) { return $false }
     # Only Administrators, SYSTEM and the node's account read its key
     Protect-Folder -Path $script:NODE_PATH -ServiceAccount | Out-Null
-    foreach ($rule in @(@{ Name = "relay"; Port = 21117 }, @{ Name = "relay over WebSocket"; Port = 21119 })) {
+    foreach ($rule in @(@{ Name = "relay"; Port = 21117 }, @{ Name = "relay over WebSocket"; Port = 21119 }, @{ Name = "legs from other sites"; Port = 21125 })) {
         if (-not (Get-NetFirewallRule -DisplayName "NeoDesk relay node - $($rule.Name)" -ErrorAction SilentlyContinue)) {
             New-NetFirewallRule -DisplayName "NeoDesk relay node - $($rule.Name)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $rule.Port -Profile Any -ErrorAction SilentlyContinue | Out-Null
         }

@@ -129,21 +129,26 @@ func (nc *nodeConn) handle(f wire.Frame) {
 		n := h.state(nc.nodeID)
 		// Only a session this node holds a ticket for: billing and the
 		// session record must never follow another node's (or another
-		// organization's) uuid
+		// organization's) uuid. The dialing node of a two-node session
+		// reports quietly: the accepting node drives billing.
 		t := n.tickets[m.UUID]
 		known := t != nil && !t.live
+		quiet := false
 		if known {
 			n.active++
 			t.live = true
 			t.since = now
-			h.sessions[m.UUID] = nc.nodeID
+			quiet = t.leg == wire.LegDial
+			if !quiet {
+				h.sessions[m.UUID] = nc.nodeID
+			}
 		}
 		h.mu.Unlock()
 		if !known {
 			nc.foreignSession("started", m.UUID)
 			return
 		}
-		if h.cfg.Events != nil {
+		if h.cfg.Events != nil && !quiet {
 			h.cfg.Events.NodeSessionStarted(nc.nodeID, m.UUID)
 		}
 	case wire.TypeEnded:
@@ -153,7 +158,8 @@ func (nc *nodeConn) handle(f wire.Frame) {
 		}
 		h.mu.Lock()
 		n := h.state(nc.nodeID)
-		_, known := n.tickets[m.UUID]
+		tk, known := n.tickets[m.UUID]
+		quiet := known && tk.leg == wire.LegDial
 		if known {
 			if n.active > 0 {
 				n.active--
@@ -175,7 +181,7 @@ func (nc *nodeConn) handle(f wire.Frame) {
 			nc.foreignSession("ended", m.UUID)
 			return
 		}
-		if h.cfg.Events != nil {
+		if h.cfg.Events != nil && !quiet {
 			h.cfg.Events.NodeSessionEnded(nc.nodeID, m.UUID, m.Up, m.Down)
 		}
 	case wire.TypeStats:
@@ -186,6 +192,7 @@ func (nc *nodeConn) handle(f wire.Frame) {
 		h.mu.Lock()
 		n := h.state(nc.nodeID)
 		n.active, n.up, n.down = s.Active, s.UpTotal, s.DownTotal
+		n.addLegCountsLocked(s)
 		h.mu.Unlock()
 		if err := h.cfg.Store.UpdateRelayNodeState(nc.nodeID, nc.hello.Version, nc.hello.LanAddr, nc.hello.PublicAddr, h.cfg.Now()); err != nil {
 			h.cfg.Logf("[nodes] node %s: save state: %v", nc.nodeID, err)
@@ -193,8 +200,16 @@ func (nc *nodeConn) handle(f wire.Frame) {
 		if h.cfg.Events != nil {
 			h.cfg.Events.NodeStats(nc.nodeID, s)
 		}
+	case wire.TypeProbed:
+		var m wire.Probed
+		if f.Decode(&m) != nil {
+			return
+		}
+		if pe, ok := h.cfg.Events.(ProbeEvents); ok {
+			pe.NodeProbed(nc.nodeID, m.Results)
+		}
 	default:
-		// probed (phase 2) and types of newer nodes
+		// types of newer nodes
 	}
 }
 
@@ -203,4 +218,27 @@ func (nc *nodeConn) handle(f wire.Frame) {
 func (nc *nodeConn) foreignSession(kind, uuid string) {
 	nc.h.cfg.Logf("[nodes] Node %s reported %s for uuid %s without a ticket; ignored", nc.nodeID, kind, uuid)
 	nc.h.audit("relay_node.unknown_session", map[string]string{"node_id": nc.nodeID, "report": kind, "uuid": uuid})
+}
+
+// addLegCountsLocked adds the legs since the node's last stats to the
+// counts of the next audit. Totals that went down are a restarted node.
+func (n *nodeState) addLegCountsLocked(s wire.Stats) {
+	prev := n.legs
+	if s.LegsAccepted < prev.accepted {
+		prev = legTotals{}
+	}
+	n.counts.legsAccepted += s.LegsAccepted - prev.accepted
+	for reason, total := range s.LegsRefused {
+		before := prev.refused[reason]
+		if total < before {
+			before = 0
+		}
+		if d := total - before; d > 0 {
+			if n.counts.legsRefused == nil {
+				n.counts.legsRefused = map[string]int64{}
+			}
+			n.counts.legsRefused[reason] += d
+		}
+	}
+	n.legs = legTotals{accepted: s.LegsAccepted, refused: s.LegsRefused}
 }

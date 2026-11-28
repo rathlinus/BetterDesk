@@ -75,6 +75,7 @@ type nodeState struct {
 	up, down int64
 	tickets  map[string]*ticket
 	counts   ticketCounts
+	legs     legTotals
 }
 
 type ticket struct {
@@ -85,10 +86,24 @@ type ticket struct {
 	expires   time.Time
 	live      bool
 	since     time.Time
+	// leg is the node's role in a session over two nodes ("" for one
+	// node): the dialing node's started and ended don't reach Events,
+	// the accepting node's do
+	leg string
 }
 
 type ticketCounts struct {
 	pushed, ok, rejected, unavailable int
+	// legs from other nodes since the last audit: accepted, refused by
+	// reason
+	legsAccepted int64
+	legsRefused  map[string]int64
+}
+
+// legTotals are the leg counts of the node's last stats.
+type legTotals struct {
+	accepted int64
+	refused  map[string]int64
 }
 
 type window struct {
@@ -385,6 +400,9 @@ func (h *Hub) register(nc *nodeConn, siteID string) {
 	if old != nil {
 		go old.closeWith(wire.Error{Code: wire.CodeReplaced, Msg: "the node connected again"})
 	}
+	if ce, ok := h.cfg.Events.(ConnectEvents); ok {
+		ce.NodeConnected(nc.nodeID)
+	}
 }
 
 func (h *Hub) unregister(nc *nodeConn) {
@@ -488,22 +506,30 @@ func (h *Hub) RevokeForPeer(peer string) {
 	}
 }
 
-// End asks the node that runs the session uuid to end it; every node when
-// the hub does not know which one.
+// End asks the nodes that run the session uuid to end it (two for a
+// session between two sites); every node when the hub does not know
+// which.
 func (h *Hub) End(uuid string) {
 	if uuid == "" {
 		return
 	}
 	h.mu.Lock()
 	var conns []*nodeConn
-	if id, ok := h.sessions[uuid]; ok {
-		if n := h.nodes[id]; n != nil && n.conn != nil {
+	for _, n := range h.nodes {
+		if n.tickets[uuid] != nil && n.conn != nil {
 			conns = append(conns, n.conn)
 		}
-	} else {
-		for _, n := range h.nodes {
-			if n.conn != nil {
+	}
+	if len(conns) == 0 {
+		if id, ok := h.sessions[uuid]; ok {
+			if n := h.nodes[id]; n != nil && n.conn != nil {
 				conns = append(conns, n.conn)
+			}
+		} else {
+			for _, n := range h.nodes {
+				if n.conn != nil {
+					conns = append(conns, n.conn)
+				}
 			}
 		}
 	}
@@ -560,13 +586,26 @@ func (h *Hub) flushAudit() {
 	}
 	var rows []row
 	for id, n := range h.nodes {
-		if n.counts.pushed > 0 {
+		if n.counts.pushed > 0 || n.counts.legsAccepted > 0 || len(n.counts.legsRefused) > 0 {
 			rows = append(rows, row{id, n.counts})
 			n.counts = ticketCounts{}
 		}
 	}
 	h.mu.Unlock()
 	for _, r := range rows {
+		if r.c.legsAccepted > 0 || len(r.c.legsRefused) > 0 {
+			fields := map[string]string{"node_id": r.id, "accepted": strconv.FormatInt(r.c.legsAccepted, 10)}
+			var refused int64
+			for reason, n := range r.c.legsRefused {
+				fields["refused_"+reason] = strconv.FormatInt(n, 10)
+				refused += n
+			}
+			h.audit("relay_node.legs", fields)
+			h.cfg.Logf("[nodes] Node %s legs from other nodes: %d accepted, %d refused", r.id, r.c.legsAccepted, refused)
+		}
+		if r.c.pushed == 0 {
+			continue
+		}
 		h.audit("relay_node.tickets", map[string]string{
 			"node_id":     r.id,
 			"pushed":      strconv.Itoa(r.c.pushed),

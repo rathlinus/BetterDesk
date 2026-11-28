@@ -153,8 +153,12 @@ type pendingConn struct {
 	remote    string          // RemoteAddr string (WS upgrade remote)
 	transport relayTransport
 	created   time.Time
-	done      chan struct{} // closed when paired or timed out
+	done      chan struct{} // closed when paired or timed out (markDone)
+	doneOnce  sync.Once
 }
+
+// markDone closes done once, whoever gets there first.
+func (pc *pendingConn) markDone() { pc.doneOnce.Do(func() { close(pc.done) }) }
 
 func (pc *pendingConn) close() {
 	if pc.ws != nil {
@@ -455,7 +459,7 @@ func (s *Server) pairIncomingConn(pc *pendingConn, uuid string) {
 		defer s.authorizations.End(uuid)
 		existing := val.(*pendingConn)
 		s.pending.Delete(uuid)
-		close(existing.done)
+		existing.markDone()
 		if existing.transport != pc.transport {
 			tcpPC, wsPC := existing, pc
 			if existing.transport == relayTransportWS {
@@ -641,7 +645,7 @@ func (s *Server) cleanupPending() {
 					if _, loaded := s.pending.LoadAndDelete(key); loaded {
 						s.authorizations.Release(key.(string))
 						pc.close()
-						close(pc.done)
+						pc.markDone()
 					}
 				}
 				return true

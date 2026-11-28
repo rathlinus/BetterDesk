@@ -43,7 +43,12 @@ func (t *NodeTickets) Authorize(ctx context.Context, tk relay.Ticket) error {
 
 // AuthorizePair is Authorize with the ticket's fields.
 func (t *NodeTickets) AuthorizePair(ctx context.Context, uuid, initiator, target string, account int64, session string, expires time.Time) error {
-	h := t.h
+	return t.h.push(ctx, t.nodeID, uuid, initiator, target, account, session, expires, nil)
+}
+
+// push sends a ticket, with a leg for a session over two nodes, to the
+// node and waits for its ack.
+func (h *Hub) push(ctx context.Context, nodeID, uuid, initiator, target string, account int64, session string, expires time.Time, leg *wire.Leg) error {
 	if uuid == "" || initiator == "" || target == "" {
 		return fmt.Errorf("%w: incomplete ticket", ErrRejected)
 	}
@@ -55,13 +60,13 @@ func (t *NodeTickets) AuthorizePair(ctx context.Context, uuid, initiator, target
 		ctx, cancel = context.WithTimeout(ctx, h.cfg.AuthorizeBudget)
 		defer cancel()
 	}
-	h.count(t.nodeID, func(c *ticketCounts) { c.pushed++ })
+	h.count(nodeID, func(c *ticketCounts) { c.pushed++ })
 	unavailable := func(why string) error {
-		h.count(t.nodeID, func(c *ticketCounts) { c.unavailable++ })
+		h.count(nodeID, func(c *ticketCounts) { c.unavailable++ })
 		return fmt.Errorf("%w: %s", ErrUnavailable, why)
 	}
 
-	nc := h.conn(t.nodeID)
+	nc := h.conn(nodeID)
 	if nc == nil {
 		return unavailable("not connected")
 	}
@@ -72,7 +77,7 @@ func (t *NodeTickets) AuthorizePair(ctx context.Context, uuid, initiator, target
 	}
 	defer nc.removeAck(id)
 
-	msg := wire.Authorize{ID: id, UUID: uuid, Initiator: initiator, Target: target}
+	msg := wire.Authorize{ID: id, UUID: uuid, Initiator: initiator, Target: target, Leg: leg}
 	if !expires.IsZero() {
 		msg.ExpiresUnixMs = expires.UnixMilli()
 	}
@@ -88,7 +93,7 @@ func (t *NodeTickets) AuthorizePair(ctx context.Context, uuid, initiator, target
 	select {
 	case a := <-ch:
 		if !a.OK {
-			h.count(t.nodeID, func(c *ticketCounts) { c.rejected++ })
+			h.count(nodeID, func(c *ticketCounts) { c.rejected++ })
 			return fmt.Errorf("%w: %s", ErrRejected, a.Err)
 		}
 	case <-ctx.Done():
@@ -96,16 +101,20 @@ func (t *NodeTickets) AuthorizePair(ctx context.Context, uuid, initiator, target
 	case <-nc.done:
 		return unavailable("connection lost")
 	}
-	h.count(t.nodeID, func(c *ticketCounts) { c.ok++ })
+	h.count(nodeID, func(c *ticketCounts) { c.ok++ })
 	now := h.cfg.Now()
 	if expires.IsZero() {
 		expires = now.Add(config.RelayPairTimeout)
 	}
 	h.mu.Lock()
-	n := h.state(t.nodeID)
+	n := h.state(nodeID)
 	n.pruneLocked(h, now)
-	n.tickets[uuid] = &ticket{initiator: initiator, target: target, account: account, session: session, expires: expires}
-	h.sessions[uuid] = t.nodeID
+	tk := &ticket{initiator: initiator, target: target, account: account, session: session, expires: expires}
+	if leg != nil {
+		tk.leg = leg.Role
+	}
+	n.tickets[uuid] = tk
+	h.sessions[uuid] = nodeID
 	h.mu.Unlock()
 	return nil
 }

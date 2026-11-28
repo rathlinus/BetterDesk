@@ -398,14 +398,14 @@ jobs:
             docker compose -f "$file" config --quiet
           done
       # The relay node runs in node mode, publishes the relay's TCP and
-      # WebSocket ports and keeps its key in the volume
+      # WebSocket ports and the leg port and keeps its key in the volume
       - name: Check the relay node's compose file
         run: |
           set -euo pipefail
           config=$(NODE_JOIN=nd1.test docker compose -f install/docker-compose.relay-node.yml config --format json)
           jq -e '.services["relay-node"] | .environment.MODE == "node" and .environment.NODE_JOIN == "nd1.test"
             and .environment.NODE_DATA_DIR == "/opt/neodesk/data"
-            and ([.ports[].target] | sort) == [21117, 21119]
+            and ([.ports[].target] | sort) == [21117, 21119, 21125]
             and ([.volumes[] | select(.target == "/opt/neodesk/data") | .type] == ["volume"])' <<< "$config" >/dev/null \
             || { echo "install/docker-compose.relay-node.yml:"; jq '.services["relay-node"]' <<< "$config"; exit 1; }
       # The console is published on every address (IPv6 too) unless

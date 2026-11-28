@@ -38,6 +38,8 @@ type Glue struct {
 	// node that reports one of those as its own address loses it, so no
 	// session meant for the central relay can be routed to it.
 	OwnRelay func(addr string) bool
+
+	probes probes
 }
 
 // nodeAddr is addr unless it is one of the server's own relay addresses.
@@ -132,7 +134,10 @@ func toHubNode(n *db.RelayNode) *hub.Node {
 
 // ---- hub.Events ----
 
-// NodeSessionStarted meters a node session like a central one.
+// NodeSessionStarted meters a node session like a central one. For a
+// session over two nodes only the accepting node's reports come here
+// (the hub keeps the dialing node's to itself), so a session is billed
+// and ended once.
 func (g *Glue) NodeSessionStarted(_ string, uuid string) {
 	if g.Billing != nil {
 		g.Billing.ActivateRelay(uuid)
@@ -249,6 +254,8 @@ var (
 	_ hub.Store         = (*Glue)(nil)
 	_ hub.SessionOwner  = (*Glue)(nil)
 	_ hub.Events        = (*Glue)(nil)
+	_ hub.ConnectEvents = (*Glue)(nil)
+	_ hub.ProbeEvents   = (*Glue)(nil)
 	_ hub.Auditor       = (*Glue)(nil)
 	_ signal.SiteRouter = (*Glue)(nil)
 )

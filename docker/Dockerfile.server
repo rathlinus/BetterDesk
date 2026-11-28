@@ -115,7 +115,8 @@ ENV CONSOLE_PORT=0
 # 21118 - WebSocket Signal
 # 21119 - WebSocket Relay
 # 21123 - Relay node control (NODE_CONTROL_PORT, 0 turns it off)
-EXPOSE 21115 21116/tcp 21116/udp 21117 21118 21119 21121 21122 21123
+# 21125 - Relay node legs from other sites' nodes (MODE=node, NODE_LEG_PORT)
+EXPOSE 21115 21116/tcp 21116/udp 21117 21118 21119 21121 21122 21123 21125
 
 # Health check via the API (the console is off here), over HTTPS with TLS_API
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

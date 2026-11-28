@@ -12,8 +12,9 @@ const (
 	TypeStarted   = "started"   // N
 	TypeEnded     = "ended"     // N
 	TypeStats     = "stats"     // N
-	TypeProbe     = "probe"     // C, phase 2
-	TypeProbed    = "probed"    // N, phase 2
+	TypeCancel    = "cancel"    // C
+	TypeProbe     = "probe"     // C
+	TypeProbed    = "probed"    // N
 	TypePing      = "ping"      // C
 	TypePong      = "pong"      // N
 )
@@ -40,6 +41,10 @@ type Hello struct {
 	PublicAddr   string `json:"public_addr"`
 	WSLanAddr    string `json:"ws_lan_addr"`
 	WSPublicAddr string `json:"ws_public_addr"`
+	// LegLanAddr and LegPublicAddr are where other nodes reach this
+	// node's leg listener (NODE_LEG_PORT), "" when it has none there
+	LegLanAddr    string `json:"leg_lan_addr,omitempty"`
+	LegPublicAddr string `json:"leg_public_addr,omitempty"`
 }
 
 func (Hello) Type() string { return TypeHello }
@@ -63,10 +68,18 @@ type Error struct {
 
 func (Error) Type() string { return TypeError }
 
-// Leg is the phase 2 part of a ticket for a session over two nodes.
+// Roles of a node in a session over two nodes.
+const (
+	LegDial   = "dial"   // the node dials the other node when its peer arrives
+	LegAccept = "accept" // the node takes the other node's leg as the second side
+)
+
+// Leg is the part of a ticket for a session over two nodes: the node
+// dials PeerAddr and accepts only PeerKey there (dial), or takes a leg
+// from the node with PeerKey (accept, no PeerAddr).
 type Leg struct {
-	Role     string `json:"role"` // "dial" | "accept"
-	PeerAddr string `json:"peer_addr"`
+	Role     string `json:"role"`
+	PeerAddr string `json:"peer_addr,omitempty"`
 	PeerKey  string `json:"peer_key"`
 }
 
@@ -105,6 +118,14 @@ type End struct {
 
 func (End) Type() string { return TypeEnd }
 
+// Cancel drops the unclaimed ticket of UUID: the other node of a
+// session over two nodes did not take its ticket.
+type Cancel struct {
+	UUID string `json:"uuid"`
+}
+
+func (Cancel) Type() string { return TypeCancel }
+
 // Started reports that both sides of a session reached the node.
 type Started struct {
 	UUID string `json:"uuid"`
@@ -127,25 +148,39 @@ type Stats struct {
 	Pending   int   `json:"pending"`
 	UpTotal   int64 `json:"up_total"`
 	DownTotal int64 `json:"down_total"`
+	// Legs counts the legs from other nodes since the node started:
+	// accepted, and refused by reason (LegRefused*)
+	LegsAccepted int64            `json:"legs_accepted,omitempty"`
+	LegsRefused  map[string]int64 `json:"legs_refused,omitempty"`
 }
+
+// Reasons a node refuses a leg from another node.
+const (
+	LegRefusedNoTicket  = "no_ticket"    // no accept ticket for the uuid
+	LegRefusedWrongKey  = "wrong_key"    // the dialer's key is not the one central named
+	LegRefusedRate      = "rate_limited" // too many legs or refusals from the address
+	LegRefusedHandshake = "handshake"    // TLS failed or no Ed25519 client certificate
+	LegRefusedBadFrame  = "bad_frame"    // the first frame is not RequestRelay{uuid}
+)
 
 func (Stats) Type() string { return TypeStats }
 
-// ProbeTarget is a node to check reachability to (phase 2).
+// ProbeTarget is a node to check reachability to: a TLS handshake to its
+// leg listener at Addr that must show Key.
 type ProbeTarget struct {
 	NodeID string `json:"node_id"`
 	Addr   string `json:"addr"`
 	Key    string `json:"key"`
 }
 
-// Probe asks the node to check reachability (phase 2).
+// Probe asks the node to check reachability.
 type Probe struct {
 	Targets []ProbeTarget `json:"targets"`
 }
 
 func (Probe) Type() string { return TypeProbe }
 
-// ProbeResult is one reachability check (phase 2).
+// ProbeResult is one reachability check.
 type ProbeResult struct {
 	NodeID string `json:"node_id"`
 	Addr   string `json:"addr"`
@@ -153,7 +188,7 @@ type ProbeResult struct {
 	RTTMs  int64  `json:"rtt_ms"`
 }
 
-// Probed answers Probe (phase 2).
+// Probed answers Probe.
 type Probed struct {
 	Results []ProbeResult `json:"results"`
 }

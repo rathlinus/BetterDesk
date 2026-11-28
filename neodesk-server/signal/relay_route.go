@@ -28,6 +28,9 @@ type RelayRoute struct {
 	// the public relay.
 	SameNetwork bool
 	Hairpin     bool
+	// nodeFallback is the one-node route admitRoute moves a route over
+	// two nodes to when they can't take the tickets.
+	nodeFallback *NodeRelay
 }
 
 // Values of RelayRoute.Via.
@@ -93,6 +96,7 @@ func (s *Server) chooseRelay(req relayRouteRequest) RelayRoute {
 	if node, ok := s.nodeRoute(req); ok {
 		route.Addr, route.TargetAddr = node.Addr, node.TargetAddr
 		route.Tickets, route.Via = node.Tickets, node.Via
+		route.nodeFallback = node.Fallback
 	}
 	return route
 }

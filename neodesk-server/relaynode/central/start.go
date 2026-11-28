@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/neodeskapp/neodesk/neodesk-server/db"
 	"github.com/neodeskapp/neodesk/neodesk-server/relaynode/hub"
@@ -27,6 +28,12 @@ type Config struct {
 	// store, events and auditor (timings, Logf); zero values are the
 	// hub's defaults.
 	Hub hub.Config
+	// ProbeInterval is how often nodes check that they reach the nodes
+	// of their organization at other sites (DefaultProbeInterval when
+	// 0); ProbeDelay is the wait after a node connects before a round
+	// (DefaultProbeDelay when 0, negative for none).
+	ProbeInterval time.Duration
+	ProbeDelay    time.Duration
 }
 
 // Start opens the control listener relay nodes connect to and turns on
@@ -42,6 +49,13 @@ func Start(ctx context.Context, cfg Config) (*Glue, error) {
 	}
 	svc := sites.New(cfg.DB)
 	glue := &Glue{DB: cfg.DB, Sites: svc, Pin: pin, Billing: cfg.Billing}
+	glue.probes.interval, glue.probes.delay = cfg.ProbeInterval, cfg.ProbeDelay
+	if glue.probes.interval <= 0 {
+		glue.probes.interval = DefaultProbeInterval
+	}
+	if glue.probes.delay == 0 {
+		glue.probes.delay = DefaultProbeDelay
+	}
 	hc := cfg.Hub
 	hc.Addr, hc.Cert, hc.ServerPK = cfg.Addr, cert, cfg.ServerPK
 	hc.Store, hc.Events, hc.Audit = glue, glue, glue
@@ -66,5 +80,6 @@ func Start(ctx context.Context, cfg Config) (*Glue, error) {
 		glue.OwnRelay = cfg.Signal.IsOwnRelay
 		cfg.Signal.SetSiteRouter(glue)
 	}
+	go glue.runProbes(ctx)
 	return glue, nil
 }

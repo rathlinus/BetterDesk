@@ -46,6 +46,8 @@ type Agent struct {
 	cert      tls.Certificate
 	statePath string
 	reg       *relay.AuthorizationRegistry
+	gate      *gate
+	srv       *relay.Server // set by Run
 	active    func() int
 
 	mu      sync.Mutex
@@ -55,6 +57,7 @@ type Agent struct {
 	queue   []wire.Message
 	pending map[string]pendingTicket // pushed tickets not started yet
 	revoked bool
+	legs    *legListener // nil while the leg listener is off
 
 	upTotal, downTotal atomic.Int64
 }
@@ -89,12 +92,19 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.BackoffMax <= 0 {
 		cfg.BackoffMax = 60 * time.Second
 	}
+	if cfg.LegsPerMinute <= 0 {
+		cfg.LegsPerMinute = DefaultLegsPerMinute
+	}
+	if cfg.LegRefusalsLimit <= 0 {
+		cfg.LegRefusalsLimit = DefaultLegRefusalsLimit
+	}
 	a := &Agent{
 		cfg:       cfg,
 		statePath: filepath.Join(cfg.DataDir, StateFileName),
 		reg:       relay.NewAuthorizationRegistry(),
 		pending:   make(map[string]pendingTicket),
 	}
+	a.gate = newGate(a, a.reg)
 	st, err := loadState(a.statePath)
 	if err != nil {
 		return nil, err
@@ -156,7 +166,8 @@ func (a *Agent) NodeID() string {
 func (a *Agent) Run(ctx context.Context) error {
 	cfg := a.cfg.Relay
 	srv := relay.New(cfg)
-	srv.SetTicketClaims(a.reg)
+	srv.SetTicketClaims(a.gate)
+	a.srv = srv
 	srv.SetBandwidthLimiter(ratelimit.NewBandwidthLimiter(config.DefaultTotalBandwidth, config.DefaultSingleBandwidth))
 	if cfg.RelayMaxConnsIP > 0 {
 		srv.SetConnLimiter(ratelimit.NewConnLimiterFromInt(cfg.RelayMaxConnsIP))
@@ -173,6 +184,9 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 	defer srv.Stop()
+	if err := a.startLegListener(ctx); err != nil {
+		return err
+	}
 	if a.cfg.Ready != nil {
 		a.cfg.Ready()
 	}
@@ -320,10 +334,15 @@ func (a *Agent) hello(nodeID, token string, local net.Addr) wire.Hello {
 	if wsPublic == "" {
 		wsPublic = plusTwo(a.cfg.PublicAddr)
 	}
-	return wire.Hello{
+	h := wire.Hello{
 		NodeID: nodeID, Token: token, Version: a.cfg.Version,
 		LanAddr: lan, PublicAddr: a.cfg.PublicAddr, WSLanAddr: wsLan, WSPublicAddr: wsPublic,
 	}
+	if a.LegAddr() != nil {
+		h.LegLanAddr = legAddrFor(a.cfg.LegLanAddr, lan, a.cfg.LegPort)
+		h.LegPublicAddr = legAddrFor(a.cfg.LegPublicAddr, a.cfg.PublicAddr, a.cfg.LegPort)
+	}
+	return h
 }
 
 // welcomed saves the enrollment the first welcome completes.
@@ -394,7 +413,20 @@ func (a *Agent) handle(c *wire.Conn, f wire.Frame) error {
 	case wire.TypeEnd:
 		var m wire.End
 		if f.Decode(&m) == nil && m.UUID != "" {
-			a.reg.End(m.UUID)
+			a.gate.End(m.UUID)
+		}
+	case wire.TypeCancel:
+		var m wire.Cancel
+		if f.Decode(&m) == nil && m.UUID != "" {
+			a.gate.cancel(m.UUID)
+			a.mu.Lock()
+			delete(a.pending, m.UUID)
+			a.mu.Unlock()
+		}
+	case wire.TypeProbe:
+		var m wire.Probe
+		if f.Decode(&m) == nil {
+			go a.probe(c, m)
 		}
 	case wire.TypeError:
 		var e wire.Error
@@ -402,7 +434,7 @@ func (a *Agent) handle(c *wire.Conn, f wire.Frame) error {
 		a.refused(e)
 		return &RefusedError{e.Code, e.Msg}
 	default:
-		// probe (phase 2) and types of a newer central
+		// types of a newer central
 	}
 	return nil
 }
@@ -418,10 +450,22 @@ func (a *Agent) authorize(m wire.Authorize) wire.Ack {
 	if m.ExpiresUnixMs != 0 && time.UnixMilli(m.ExpiresUnixMs).Before(now.Add(-clockSkew)) {
 		return wire.Ack{ID: m.ID, Err: "expired"}
 	}
+	var lt *legTicket
+	if m.Leg != nil {
+		var refusal string
+		if lt, refusal = a.legTicket(*m.Leg, now); refusal != "" {
+			return wire.Ack{ID: m.ID, Err: refusal}
+		}
+	}
 	// The account and console session stay on central; the node's
 	// registry only pairs the two sides
 	if !a.reg.AuthorizeForSession(m.UUID, m.Initiator, m.Target, 0, "") {
 		return wire.Ack{ID: m.ID, Err: "conflict"}
+	}
+	if lt != nil {
+		a.gate.add(m.UUID, lt)
+	} else {
+		a.gate.forget(m.UUID)
 	}
 	a.mu.Lock()
 	for id, t := range a.pending {
@@ -432,6 +476,26 @@ func (a *Agent) authorize(m wire.Authorize) wire.Ack {
 	a.pending[m.UUID] = pendingTicket{initiator: m.Initiator, expires: now.Add(config.RelayPairTimeout)}
 	a.mu.Unlock()
 	return wire.Ack{ID: m.ID, OK: true}
+}
+
+// legTicket checks the leg of a pushed ticket; refusal is the ack's error.
+func (a *Agent) legTicket(l wire.Leg, now time.Time) (*legTicket, string) {
+	if _, err := wire.DecodePublicKey(l.PeerKey); err != nil {
+		return nil, "bad_leg"
+	}
+	switch l.Role {
+	case wire.LegDial:
+		if _, _, err := net.SplitHostPort(l.PeerAddr); err != nil {
+			return nil, "bad_leg"
+		}
+	case wire.LegAccept:
+		if a.LegAddr() == nil {
+			return nil, "no_leg_listener"
+		}
+	default:
+		return nil, "bad_leg"
+	}
+	return &legTicket{role: l.Role, peerAddr: l.PeerAddr, peerKey: l.PeerKey, expires: now.Add(config.RelayPairTimeout)}, ""
 }
 
 // SessionStarted reports a session whose two sides paired (relay hook).
@@ -483,7 +547,14 @@ func (a *Agent) sendStats(c *wire.Conn) error {
 	if a.active != nil {
 		active = a.active()
 	}
-	return c.Write(wire.Stats{Active: active, Pending: pending, UpTotal: a.upTotal.Load(), DownTotal: a.downTotal.Load()}, writeTimeout)
+	st := wire.Stats{Active: active, Pending: pending, UpTotal: a.upTotal.Load(), DownTotal: a.downTotal.Load()}
+	a.mu.Lock()
+	legs := a.legs
+	a.mu.Unlock()
+	if legs != nil {
+		st.LegsAccepted, st.LegsRefused = legs.counts()
+	}
+	return c.Write(st, writeTimeout)
 }
 
 func (a *Agent) statsLoop(c *wire.Conn, done <-chan struct{}) {

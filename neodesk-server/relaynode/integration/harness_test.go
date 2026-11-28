@@ -75,6 +75,18 @@ func (u *uuidLog) add(id string) {
 	u.mu.Unlock()
 }
 
+func (u *uuidLog) count(id string) int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	n := 0
+	for _, x := range u.list {
+		if x == id {
+			n++
+		}
+	}
+	return n
+}
+
 func (u *uuidLog) has(id string) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -243,7 +255,8 @@ func newServer(t *testing.T) *server {
 	glue, err := central.Start(ctx, central.Config{
 		Addr: "127.0.0.1:0", CertDir: dir, ServerPK: kp.PublicKeyBase64(),
 		DB: database, Billing: s.billing, Signal: s.sig,
-		Hub: hub.Config{Logf: s.hubLogs.Logf},
+		Hub:        hub.Config{Logf: s.hubLogs.Logf},
+		ProbeDelay: 50 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("central: %v", err)
@@ -273,8 +286,13 @@ func (s *server) controlAddr() string {
 
 // site makes a site with a private network.
 func (s *server) site(name, cidr string) string {
+	return s.siteVPN(name, cidr, "")
+}
+
+// siteVPN makes a site with a private network in a VPN group.
+func (s *server) siteVPN(name, cidr, vpn string) string {
 	s.t.Helper()
-	site, err := s.glue.Sites.CreateSite("", name, "")
+	site, err := s.glue.Sites.CreateSite("", name, vpn)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -313,6 +331,7 @@ type node struct {
 	agent     *agent.Agent
 	relayAddr string // what peers dial: the node relay, or a proxy in front
 	relayPort int
+	legAddr   string // the leg listener
 	logs      *logBuf
 	stop      func()
 }
@@ -327,6 +346,9 @@ type nodeOpts struct {
 	// publicAddr is the public address the node reports, its relay
 	// address when empty
 	publicAddr string
+	// legLan and legPublic override the leg addresses the node reports
+	// ("none" for none); both default to its leg listener
+	legLan, legPublic string
 }
 
 // startNode enrolls a relay node with a token of the site and waits until
@@ -357,6 +379,7 @@ func (s *server) startNode(siteID string, o *nodeOpts) *node {
 	if o.publicAddr != "" {
 		publicAddr = o.publicAddr
 	}
+	legPort := freePorts(t, []int{0}, nil)
 	rcfg := config.DefaultConfig()
 	rcfg.RelayPort = relayPort
 	rcfg.KeyFile = filepath.Join(dataDir, "id_ed25519")
@@ -364,6 +387,7 @@ func (s *server) startNode(siteID string, o *nodeOpts) *node {
 	a, err := agent.New(agent.Config{
 		Join: s.joinString(siteID, controlAddr), DataDir: dataDir,
 		LanAddr: relayAddr, PublicAddr: publicAddr,
+		LegPort: legPort, LegLanAddr: o.legLan, LegPublicAddr: o.legPublic,
 		Relay: rcfg, Version: "integration", Logf: logs.Logf,
 		BackoffMin: 50 * time.Millisecond, BackoffMax: 200 * time.Millisecond,
 	})
@@ -394,7 +418,7 @@ func (s *server) startNode(siteID string, o *nodeOpts) *node {
 	waitFor(t, "node online at the hub", 5*time.Second, func() bool {
 		return a.NodeID() != "" && s.glue.Hub.Online(a.NodeID())
 	})
-	return &node{id: a.NodeID(), agent: a, relayAddr: relayAddr, relayPort: relayPort, logs: logs, stop: stop}
+	return &node{id: a.NodeID(), agent: a, relayAddr: relayAddr, relayPort: relayPort, legAddr: fmt.Sprintf("127.0.0.1:%d", legPort), logs: logs, stop: stop}
 }
 
 // ---- fake RustDesk peers ----
@@ -629,6 +653,27 @@ func (s *server) sessionRecord(hostID, relayUUID string, ok func(*db.PeerConnect
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// reach waits for the stored probe result of node from reaching node to
+// and returns it.
+func (s *server) reach(from, to string) db.SiteReachability {
+	s.t.Helper()
+	var got db.SiteReachability
+	waitFor(s.t, "probe result "+from+" -> "+to, 5*time.Second, func() bool {
+		rows, err := s.db.ListSiteReachability()
+		if err != nil {
+			s.t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.FromNode == from && r.ToNode == to {
+				got = r
+				return true
+			}
+		}
+		return false
+	})
+	return got
 }
 
 // isCentral says addr is the central relay (by port: signal may name it by

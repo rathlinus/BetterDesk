@@ -2445,7 +2445,8 @@
     "action_site_deleted": "Site deleted",
     "action_site_networks_updated": "Site networks changed",
     "action_relay_node_address_refused": "रिले नोड का पता अस्वीकार किया गया",
-    "action_relay_node_unknown_session": "रिले नोड की सत्र रिपोर्ट अनदेखी की गई"
+    "action_relay_node_unknown_session": "रिले नोड की सत्र रिपोर्ट अनदेखी की गई",
+    "action_relay_node_legs": "रिले नोड के साइट से साइट कनेक्शन गिने गए"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11211,8 +11212,6 @@
     "join_expires": "The string adds one node and works until {date}. It is shown only now.",
     "node_waiting": "Waiting for the node to connect…",
     "node_joined": "{name} joined the site.",
-    "reachability": "Reachability",
-    "reachability_note": "Whether this site's relay nodes reach the nodes of other sites, from the last check.",
     "via_private": "Private network",
     "via_public": "Internet",
     "reach_ok": "Reached in {ms} ms",
@@ -11235,6 +11234,9 @@
     "relay_node": "{name}",
     "relay_nodes": "{from} and {to}",
     "summary_one_online": "Its relay node is online.",
-    "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back."
+    "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
+    "site_to_site": "Site to site",
+    "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
   }
 }

@@ -2439,7 +2439,8 @@
     "action_site_deleted": "Standort gelöscht",
     "action_site_networks_updated": "Netze des Standorts geändert",
     "action_relay_node_address_refused": "Adresse des Relay-Knotens abgewiesen",
-    "action_relay_node_unknown_session": "Sitzungsmeldung des Relay-Knotens ignoriert"
+    "action_relay_node_unknown_session": "Sitzungsmeldung des Relay-Knotens ignoriert",
+    "action_relay_node_legs": "Verbindungen des Relay-Knotens zu anderen Standorten gezählt"
   },
   "generator": {
     "title": "NeoDesk Support Generator",
@@ -11205,8 +11206,6 @@
     "join_expires": "Der Schlüssel fügt einen Knoten hinzu und gilt bis {date}. Er wird nur jetzt angezeigt.",
     "node_waiting": "Warte auf die Verbindung des Knotens…",
     "node_joined": "{name} ist dem Standort beigetreten.",
-    "reachability": "Erreichbarkeit",
-    "reachability_note": "Ob die Relay-Knoten dieses Standorts die Knoten anderer Standorte erreichen, laut der letzten Prüfung.",
     "via_private": "Privates Netz",
     "via_public": "Internet",
     "reach_ok": "Erreicht in {ms} ms",
@@ -11229,6 +11228,9 @@
     "relay_node": "{name}",
     "relay_nodes": "{from} und {to}",
     "summary_one_online": "Sein Relay-Knoten ist online.",
-    "summary_one_offline": "Sein Relay-Knoten ist offline. Die Sitzungen seiner Geräte laufen über das Relay dieses Servers, bis er wieder da ist."
+    "summary_one_offline": "Sein Relay-Knoten ist offline. Die Sitzungen seiner Geräte laufen über das Relay dieses Servers, bis er wieder da ist.",
+    "site_to_site": "Standort zu Standort",
+    "site_to_site_note": "Ob sich die Relay-Knoten zweier Standorte erreichen, nach den eigenen Prüfungen der Knoten beim Verbinden und alle fünf Minuten. Eine Sitzung zwischen zwei Standorten läuft über die Knoten beider Standorte, wenn einer den anderen erreicht; sonst über einen Knoten, den beide Geräte erreichen, und sonst über das Relay dieses Servers.",
+    "site_to_site_empty": "Noch keine Prüfungen. Relay-Knoten prüfen die Knoten deiner anderen Standorte beim Verbinden und alle fünf Minuten."
   }
 }

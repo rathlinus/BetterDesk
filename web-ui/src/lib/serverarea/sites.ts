@@ -5,7 +5,7 @@
  * keys with their values; the page translates them.
  */
 
-import type { RelayNode, Site } from '#lib/api/sites.ts';
+import type { Reachability, RelayNode, Site } from '#lib/api/sites.ts';
 
 export interface Keyed {
 	key: string;
@@ -144,4 +144,61 @@ export function placementKey(source: string | null | undefined): string | null {
 			return 'sites.source_network';
 	}
 	return null;
+}
+
+/** A row of the site to site table: a probe from one site's node to another's */
+export interface SiteToSiteRow {
+	key: string;
+	fromSite: string;
+	fromNode: string;
+	toSite: string;
+	toNode: string;
+	via: 'private' | 'public';
+	ok: boolean;
+	rttMs: number;
+	checkedAt: string;
+}
+
+/**
+ * The probe results between nodes of different sites, named by site and
+ * node, sorted by the sites' names. Results naming a node the account
+ * can't see, and between two nodes of one site, are left out.
+ */
+export function siteToSiteRows(
+	sites: readonly Pick<Site, 'id' | 'name' | 'nodes'>[],
+	reach: readonly Reachability[]
+): SiteToSiteRow[] {
+	const where = new Map<string, { site: string; siteId: string; node: string }>();
+	for (const s of sites)
+		for (const n of s.nodes) where.set(n.id, { site: s.name, siteId: s.id, node: n.name || n.id });
+	const rows: SiteToSiteRow[] = [];
+	for (const r of reach) {
+		const from = where.get(r.from);
+		const to = where.get(r.to);
+		if (!from || !to || from.siteId === to.siteId) continue;
+		rows.push({
+			key: `${r.from}|${r.to}|${r.via}`,
+			fromSite: from.site,
+			fromNode: from.node,
+			toSite: to.site,
+			toNode: to.node,
+			via: r.via === 'private' ? 'private' : 'public',
+			ok: r.ok,
+			rttMs: r.rtt_ms,
+			checkedAt: r.checked_at
+		});
+	}
+	const cmp = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+	return rows.sort(
+		(a, b) =>
+			cmp(a.fromSite, b.fromSite) ||
+			cmp(a.toSite, b.toSite) ||
+			cmp(a.fromNode, b.fromNode) ||
+			cmp(a.toNode, b.toNode)
+	);
+}
+
+/** Whether sessions between sites can run over relay nodes at all: two sites have nodes */
+export function hasSiteToSite(sites: readonly Pick<Site, 'nodes'>[]): boolean {
+	return sites.filter((s) => s.nodes.some((n) => !n.revoked)).length >= 2;
 }

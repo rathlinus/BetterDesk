@@ -29,12 +29,21 @@
 #                                      dial it at (a port forward to this
 #                                      host); empty: only LAN devices use
 #                                      the node
+#   NODE_LEG_LAN_ADDR=192.168.1.20:21125  host:port the relay nodes of
+#   NODE_LEG_PUBLIC_ADDR=203.0.113.20:21125  other sites dial for sessions
+#                                      between two sites, over a VPN and
+#                                      from outside; default: the host of
+#                                      NODE_LAN_ADDR or NODE_PUBLIC_ADDR
+#                                      with port 21125, "none" for none
 #   NEODESK_IMAGE_TAG=3.6.56           pin a release (default: latest)
 #
 # Ports the node listens on: 21117 (relay, TCP) and 21119 (relay over
-# WebSocket). Both must reach this host from the devices, the public one
-# through a port forward. The node needs no inbound port from the central
-# server.
+# WebSocket), which must reach this host from the devices, the public one
+# through a port forward; and 21125 (NODE_LEG_PORT, TLS with the nodes'
+# own keys), which the relay nodes of the organization's other sites dial
+# when a session runs between two sites: open it towards their VPN or
+# forward it from the public address. The node needs no inbound port from
+# the central server.
 #
 # On Linux, network_mode: host (in place of the ports below) lets the node
 # see the devices' own addresses; Docker's published ports work too.
@@ -56,6 +65,7 @@ services:
     ports:
       - "21117:21117"           # Relay TCP
       - "21119:21119"           # Relay over WebSocket (RELAY_PORT + 2)
+      - "21125:21125"           # Legs from other sites' relay nodes (NODE_LEG_PORT)
       # Later, when the node also takes signalling for the site's devices:
       # - "21114:21114"         # API
       # - "21115:21115"         # NAT type test
@@ -79,6 +89,10 @@ services:
       # outside; reported to the central server at every start
       - NODE_LAN_ADDR=${NODE_LAN_ADDR:-}
       - NODE_PUBLIC_ADDR=${NODE_PUBLIC_ADDR:-}
+      # host:port where other sites' relay nodes reach this one, over a
+      # VPN and from outside (default: the hosts above with port 21125)
+      - NODE_LEG_LAN_ADDR=${NODE_LEG_LAN_ADDR:-}
+      - NODE_LEG_PUBLIC_ADDR=${NODE_LEG_PUBLIC_ADDR:-}
       - NEODESK_SUPERVISOR=docker
       # Optional: map neodesk to a bind mount's owner. Default 10001.
       - PUID=${PUID:-10001}

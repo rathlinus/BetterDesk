@@ -21,16 +21,34 @@ import (
 
 // Config sets up an Agent.
 type Config struct {
-	Join         string         // NODE_JOIN: the enrollment string, first start
-	DataDir      string         // NODE_DATA_DIR: node.key and node.json
-	LanAddr      string         // NODE_LAN_ADDR: relay TCP host:port on the LAN; the control connection's local address when empty
-	PublicAddr   string         // NODE_PUBLIC_ADDR: relay TCP host:port clients outside dial
-	WSLanAddr    string         // NODE_WS_LAN_ADDR: LanAddr's port + 2 when empty
-	WSPublicAddr string         // NODE_WS_PUBLIC_ADDR: PublicAddr's port + 2 when empty
-	Relay        *config.Config // relay ports and limits (RELAY_PORT, RELAY_MAX_CONNS_IP, ...)
-	Version      string
-	Logf         func(format string, args ...any) // log.Printf when nil
-	Ready        func()                           // called once the relay listens
+	Join         string // NODE_JOIN: the enrollment string, first start
+	DataDir      string // NODE_DATA_DIR: node.key and node.json
+	LanAddr      string // NODE_LAN_ADDR: relay TCP host:port on the LAN; the control connection's local address when empty
+	PublicAddr   string // NODE_PUBLIC_ADDR: relay TCP host:port clients outside dial
+	WSLanAddr    string // NODE_WS_LAN_ADDR: LanAddr's port + 2 when empty
+	WSPublicAddr string // NODE_WS_PUBLIC_ADDR: PublicAddr's port + 2 when empty
+	// LegPort is NODE_LEG_PORT: the TLS port other nodes of the
+	// organization dial for sessions between two sites (0: off).
+	// ConfigFromEnv sets wire.DefaultLegPort when it is unset.
+	LegPort int
+	// LegListen overrides the leg listener's address (tests); ":LegPort"
+	// when empty.
+	LegListen string
+	// LegLanAddr and LegPublicAddr are where other nodes reach the leg
+	// listener (NODE_LEG_LAN_ADDR, NODE_LEG_PUBLIC_ADDR): the host of
+	// LanAddr or PublicAddr with LegPort when empty, none when "none".
+	LegLanAddr    string
+	LegPublicAddr string
+	// Limits of the leg listener per remote address and minute:
+	// connections (DefaultLegsPerMinute) and refused legs
+	// (DefaultLegRefusalsLimit); past either the address is refused
+	// until the minute is over.
+	LegsPerMinute    int
+	LegRefusalsLimit int
+	Relay            *config.Config // relay ports and limits (RELAY_PORT, RELAY_MAX_CONNS_IP, ...)
+	Version          string
+	Logf             func(format string, args ...any) // log.Printf when nil
+	Ready            func()                           // called once the relay listens
 
 	StatsInterval time.Duration // 30 s when 0
 	IdleTimeout   time.Duration // 45 s when 0: silence from central ends the connection
@@ -45,14 +63,21 @@ func ConfigFromEnv(getenv func(string) string, relayCfg *config.Config) Config {
 	if dataDir == "" && relayCfg != nil {
 		dataDir = filepath.Dir(relayCfg.KeyFile)
 	}
+	legPort, err := wire.LegPort(getenv)
+	if err != nil {
+		legPort = wire.DefaultLegPort
+	}
 	return Config{
-		Join:         getenv("NODE_JOIN"),
-		DataDir:      dataDir,
-		LanAddr:      getenv("NODE_LAN_ADDR"),
-		PublicAddr:   getenv("NODE_PUBLIC_ADDR"),
-		WSLanAddr:    getenv("NODE_WS_LAN_ADDR"),
-		WSPublicAddr: getenv("NODE_WS_PUBLIC_ADDR"),
-		Relay:        relayCfg,
+		LegPort:       legPort,
+		LegLanAddr:    getenv("NODE_LEG_LAN_ADDR"),
+		LegPublicAddr: getenv("NODE_LEG_PUBLIC_ADDR"),
+		Join:          getenv("NODE_JOIN"),
+		DataDir:       dataDir,
+		LanAddr:       getenv("NODE_LAN_ADDR"),
+		PublicAddr:    getenv("NODE_PUBLIC_ADDR"),
+		WSLanAddr:     getenv("NODE_WS_LAN_ADDR"),
+		WSPublicAddr:  getenv("NODE_WS_PUBLIC_ADDR"),
+		Relay:         relayCfg,
 	}
 }
 
@@ -103,6 +128,26 @@ func joinHash(join string) string {
 	sum := sha256.Sum256([]byte(join))
 	return hex.EncodeToString(sum[:])
 }
+
+// legAddrFor is the leg address to report: set when set ("none" for
+// none), else the host of relayAddr with port, "" without a relay address.
+func legAddrFor(set, relayAddr string, port int) string {
+	if set == "none" {
+		return ""
+	}
+	if set != "" {
+		return set
+	}
+	host, _, err := net.SplitHostPort(relayAddr)
+	if err != nil || host == "" || port <= 0 {
+		return ""
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+// listenAddr is where a listener on port listens: every address, or
+// 127.0.0.1 in tests.
+func listenAddr(port int) string { return config.ListenAddr(port) }
 
 // plusTwo is addr with its port + 2 (the WebSocket relay), "" for "".
 func plusTwo(addr string) string {

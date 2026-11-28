@@ -268,6 +268,14 @@ func (s *Service) RecordReachability(r db.SiteReachability) error {
 	if err := s.db.UpsertSiteReachability(&r); err != nil {
 		return err
 	}
+	// Routing reads only which pairs failed; a result that does not
+	// change that keeps the cache
+	s.mu.Lock()
+	snap := s.snap
+	s.mu.Unlock()
+	if snap != nil && snap.failed[[3]string{r.FromNode, r.ToNode, r.Via}] == !r.OK {
+		return nil
+	}
 	s.Invalidate()
 	return nil
 }

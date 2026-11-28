@@ -390,6 +390,8 @@ func TestSiteRoutePairPublicAndVPN(t *testing.T) {
 	}
 }
 
+// TestSiteRoutePairUnreachableFallsBack: when the probes say neither
+// node reaches the other, one node both peers reach relays, else none.
 func TestSiteRoutePairUnreachableFallsBack(t *testing.T) {
 	f := newFixture(t)
 	a := f.site("org", "berlin", "", netSpec{"10.1.0.0/16", private}, netSpec{"198.51.100.0/25", public})
@@ -400,8 +402,10 @@ func TestSiteRoutePairUnreachableFallsBack(t *testing.T) {
 	f.live.sessions[nb.ID] = 1
 	f.device("A", "org")
 	f.device("B", "org")
-	if err := f.svc.RecordReachability(db.SiteReachability{FromNode: na.ID, ToNode: nb.ID, Via: "public", OK: false}); err != nil {
-		t.Fatal(err)
+	for _, p := range [][2]string{{na.ID, nb.ID}, {nb.ID, na.ID}} {
+		if err := f.svc.RecordReachability(db.SiteReachability{FromNode: p[0], ToNode: p[1], Via: "public", OK: false}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	r := f.svc.Route("A", net.ParseIP("198.51.100.10"), "B", net.ParseIP("198.51.100.200"))
@@ -421,8 +425,80 @@ func TestSiteRoutePairUnreachableFallsBack(t *testing.T) {
 	if err := f.svc.RecordReachability(db.SiteReachability{FromNode: na.ID, ToNode: nb.ID, Via: "public", OK: true}); err != nil {
 		t.Fatal(err)
 	}
-	if r := f.svc.Route("A", net.ParseIP("10.1.0.10"), "B", net.ParseIP("10.2.0.10")); r.Kind != Pair {
-		t.Errorf("after a good probe: %+v; want Pair", r)
+	if r := f.svc.Route("A", net.ParseIP("10.1.0.10"), "B", net.ParseIP("10.2.0.10")); r.Kind != Pair || r.Reverse {
+		t.Errorf("after a good probe: %+v; want Pair, A dialing B", r)
+	}
+}
+
+// TestSiteRoutePairOneWayDialsTheWayThatWorks: A can't reach B but B
+// reaches A, so B dials A's leg listener; the peers still dial their own
+// site's node.
+func TestSiteRoutePairOneWayDialsTheWayThatWorks(t *testing.T) {
+	f := newFixture(t)
+	a := f.site("org", "berlin", "", netSpec{"10.1.0.0/16", private})
+	b := f.site("org", "hamburg", "", netSpec{"10.2.0.0/16", private})
+	na := f.node(a.ID, "10.1.0.5:21117", "203.0.113.1:21117")
+	nb := f.node(b.ID, "10.2.0.5:21117", "203.0.113.2:21117")
+	f.device("A", "org")
+	f.device("B", "org")
+	if err := f.svc.RecordReachability(db.SiteReachability{FromNode: na.ID, ToNode: nb.ID, Via: "public", OK: false}); err != nil {
+		t.Fatal(err)
+	}
+	r := f.svc.Route("A", net.ParseIP("10.1.0.10"), "B", net.ParseIP("10.2.0.10"))
+	if r.Kind != Pair || !r.Reverse || r.A.ID != na.ID || r.B.ID != nb.ID {
+		t.Fatalf("route %+v; want Pair with B dialing A", r)
+	}
+	if r.Dial != "203.0.113.1:21117" || r.DialVia != "public" || r.InitiatorAddr != "10.1.0.5:21117" || r.TargetAddr != "10.2.0.5:21117" {
+		t.Errorf("dial %q via %q, peers %q %q; want A's public address, each peer its own node", r.Dial, r.DialVia, r.InitiatorAddr, r.TargetAddr)
+	}
+}
+
+type legLiveness struct {
+	*testLiveness
+	legs map[string][2]string
+}
+
+func (l legLiveness) LegAddrs(id string) (string, string) { return l.legs[id][0], l.legs[id][1] }
+
+// TestSiteRoutePairDialsLegAddresses: with the hub's leg addresses known,
+// the dial goes to B's leg listener, not to its relay; a node without a
+// leg address of the needed kind is not paired, and the one-node route
+// stands in. A pair carries that route as its fallback.
+func TestSiteRoutePairDialsLegAddresses(t *testing.T) {
+	f := newFixture(t)
+	vpn := "corp"
+	a := f.site("org", "berlin", vpn, netSpec{"10.1.0.0/16", private}, netSpec{"198.51.100.0/25", public})
+	b := f.site("org", "hamburg", vpn, netSpec{"10.2.0.0/16", private}, netSpec{"198.51.100.128/25", public})
+	na := f.node(a.ID, "10.1.0.5:21117", "203.0.113.1:21117")
+	nb := f.node(b.ID, "10.2.0.5:21117", "203.0.113.2:21117")
+	f.device("A", "org")
+	f.device("B", "org")
+	legs := legLiveness{testLiveness: f.live, legs: map[string][2]string{
+		na.ID: {"10.1.0.5:21125", "203.0.113.1:21125"},
+		nb.ID: {"10.2.0.5:21125", ""},
+	}}
+	f.svc.SetLiveness(legs)
+	r := f.svc.Route("A", net.ParseIP("198.51.100.10"), "B", net.ParseIP("198.51.100.200"))
+	if r.Kind != Pair || r.Dial != "10.2.0.5:21125" || r.DialVia != "private" || r.Reverse {
+		t.Fatalf("same VPN group, B without a public leg address: %+v; want A dialing B's LAN leg address", r)
+	}
+	if r.Fallback == nil || r.Fallback.Kind != Same || r.Fallback.InitiatorAddr == "" || r.Fallback.TargetAddr == "" {
+		t.Fatalf("fallback %+v; want the one node both public peers reach", r.Fallback)
+	}
+
+	none := ""
+	if _, err := f.svc.UpdateSite(b.ID, nil, &none); err != nil {
+		t.Fatal(err)
+	}
+	r = f.svc.Route("A", net.ParseIP("198.51.100.10"), "B", net.ParseIP("198.51.100.200"))
+	if r.Kind != Pair || !r.Reverse || r.Dial != "203.0.113.1:21125" {
+		t.Fatalf("no VPN, B has no public leg address: %+v; want B dialing A's public leg address", r)
+	}
+
+	legs.legs[na.ID] = [2]string{"10.1.0.5:21125", ""}
+	r = f.svc.Route("A", net.ParseIP("198.51.100.10"), "B", net.ParseIP("198.51.100.200"))
+	if r.Kind != Same {
+		t.Fatalf("no public leg address on either node: %+v; want the one-node route", r)
 	}
 }
 

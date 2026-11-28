@@ -81,6 +81,19 @@ type Events interface {
 	NodeStats(nodeID string, s wire.Stats)
 }
 
+// ConnectEvents is optional on Events: NodeConnected runs when a node's
+// control connection is up (central probes then).
+type ConnectEvents interface {
+	NodeConnected(nodeID string)
+}
+
+// ProbeEvents is optional on Events: the results of a probe the node was
+// sent. They are the node's own claims; the receiver checks that it asked
+// for them.
+type ProbeEvents interface {
+	NodeProbed(nodeID string, results []wire.ProbeResult)
+}
+
 // Auditor records security events: enrollment, failed authentication,
 // ticket pushes in aggregate, revocation. Fields never hold secrets.
 type Auditor interface {

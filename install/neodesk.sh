@@ -8419,6 +8419,7 @@ do_node_install() {
         fi
     fi
     print_info "Devices reach the relay on TCP 21117 and 21119 (WebSocket): open both towards them,"
+    print_info "and TCP 21125 towards the relay nodes of your other sites (over the VPN or forwarded),"
     print_info "and forward them from the public address when there is one"
     print_info "Update: run this again without --join. Remove: --node --uninstall (--purge also its key)"
     return 0

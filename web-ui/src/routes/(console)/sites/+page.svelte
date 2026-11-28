@@ -4,8 +4,9 @@
   (?site=<id>): its organization and VPN group, its networks (which
   addresses put a device there), its relay nodes with their state,
   addresses, sessions and traffic, adding a node (an enrollment string with
-  install commands), renaming and revoking nodes. Probe results between
-  nodes show only when there are any.
+  install commands), renaming and revoking nodes. Once two sites have
+  relay nodes, "Site to site" lists whether their nodes reach each other,
+  from the nodes' own probes.
 
   Reading needs device.view; adding, changing and deleting sites and nodes
   server.config or org.edit. The server keeps an account to its
@@ -28,7 +29,16 @@
 	} from '#lib/api/sites.ts';
 	import { formatBytes, formatNumber } from '#lib/i18n/format.ts';
 	import { t } from '#lib/i18n/i18n.svelte.ts';
-	import { nodeCounts, nodeStatus, openSite, siteSummary, sortNodes } from '#lib/serverarea/sites.ts';
+	import {
+		hasSiteToSite,
+		nodeCounts,
+		nodeStatus,
+		openSite,
+		siteSummary,
+		siteToSiteRows,
+		sortNodes,
+		type SiteToSiteRow
+	} from '#lib/serverarea/sites.ts';
 	import NoAccess from '#lib/shell/NoAccess.svelte';
 	import { can, canWrite } from '#lib/state/session.svelte.ts';
 	import Button from '#lib/ui/Button.svelte';
@@ -214,19 +224,25 @@
 	);
 
 	const nodes = $derived(site ? sortNodes(site.nodes) : []);
-	const nodeName = (id: string) => {
-		for (const s of sites) for (const n of s.nodes) if (n.id === id) return n.name || id;
-		return id;
-	};
-	const siteReach = $derived(
-		site ? reach.filter((r) => site.nodes.some((n) => n.id === r.from || n.id === r.to)) : []
-	);
-	const reachColumns = $derived<Column<Reachability>[]>([
-		{ id: 'from', label: t('sites.col_from'), cell: reachFromCell },
-		{ id: 'to', label: t('sites.col_to'), cell: reachToCell },
+	const showSiteToSite = $derived(hasSiteToSite(sites) || reach.length > 0);
+	const siteToSite = $derived(siteToSiteRows(sites, reach));
+	const reachColumns = $derived<Column<SiteToSiteRow>[]>([
+		{
+			id: 'from',
+			label: t('sites.col_from'),
+			cell: reachFromCell,
+			primary: true,
+			sortValue: (r) => r.fromSite.toLowerCase()
+		},
+		{ id: 'to', label: t('sites.col_to'), cell: reachToCell, sortValue: (r) => r.toSite.toLowerCase() },
 		{ id: 'via', label: t('sites.col_via'), cell: reachViaCell },
-		{ id: 'result', label: t('sites.col_result'), cell: reachResultCell },
-		{ id: 'checked', label: t('sites.col_checked'), cell: reachCheckedCell }
+		{
+			id: 'result',
+			label: t('sites.col_result'),
+			cell: reachResultCell,
+			sortValue: (r) => (r.ok ? r.rttMs : 1e9)
+		},
+		{ id: 'checked', label: t('sites.col_checked'), cell: reachCheckedCell, sortValue: (r) => r.checkedAt }
 	]);
 </script>
 
@@ -315,18 +331,22 @@
 	{/if}
 {/snippet}
 
-{#snippet reachFromCell(r: Reachability)}{nodeName(r.from)}{/snippet}
-{#snippet reachToCell(r: Reachability)}{nodeName(r.to)}{/snippet}
-{#snippet reachViaCell(r: Reachability)}{r.via === 'private'
+{#snippet reachFromCell(r: SiteToSiteRow)}
+	<span class="strong">{r.fromSite}</span><span class="cell-sub">{r.fromNode}</span>
+{/snippet}
+{#snippet reachToCell(r: SiteToSiteRow)}
+	<span class="strong">{r.toSite}</span><span class="cell-sub">{r.toNode}</span>
+{/snippet}
+{#snippet reachViaCell(r: SiteToSiteRow)}{r.via === 'private'
 		? t('sites.via_private')
 		: t('sites.via_public')}{/snippet}
-{#snippet reachResultCell(r: Reachability)}
+{#snippet reachResultCell(r: SiteToSiteRow)}
 	<Status
 		tone={r.ok ? 'good' : 'danger'}
-		label={r.ok ? t('sites.reach_ok', { ms: formatNumber(r.rtt_ms) }) : t('sites.reach_failed')}
+		label={r.ok ? t('sites.reach_ok', { ms: formatNumber(r.rttMs) }) : t('sites.reach_failed')}
 	/>
 {/snippet}
-{#snippet reachCheckedCell(r: Reachability)}<Time value={r.checked_at} />{/snippet}
+{#snippet reachCheckedCell(r: SiteToSiteRow)}<Time value={r.checkedAt} />{/snippet}
 
 {#if !allowed}
 	<NoAccess />
@@ -412,19 +432,20 @@
 							emptyText={canEdit && data.nodes_enabled ? t('sites.no_nodes_edit') : t('sites.no_nodes')}
 						/>
 					</div>
+				</section>
+			{/if}
 
-					{#if siteReach.length}
-						<div class="sub">
-							<h3>{t('sites.reachability')}</h3>
-							<p class="section-note">{t('sites.reachability_note')}</p>
-							<Table
-								rows={siteReach}
-								columns={reachColumns}
-								key={(r) => `${r.from}|${r.to}|${r.via}`}
-								label={t('sites.reachability')}
-							/>
-						</div>
-					{/if}
+			{#if showSiteToSite}
+				<section class="section" aria-labelledby="site-to-site-title">
+					<div class="section-head"><h2 id="site-to-site-title">{t('sites.site_to_site')}</h2></div>
+					<p class="section-note">{t('sites.site_to_site_note')}</p>
+					<Table
+						rows={siteToSite}
+						columns={reachColumns}
+						key={(r) => r.key}
+						label={t('sites.site_to_site')}
+						emptyText={t('sites.site_to_site_empty')}
+					/>
 				</section>
 			{/if}
 		{/if}
