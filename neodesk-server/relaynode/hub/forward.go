@@ -273,8 +273,8 @@ type forwardLimits struct {
 	dgPerMinute, dgPerIPMinute      int
 
 	mu    sync.Mutex
-	conns map[string]*window     // node id -> connections this minute
-	open  map[string]int         // node id -> open connections
+	conns map[string]*window      // node id -> connections this minute
+	open  map[string]int          // node id -> open connections
 	ips   map[ipWindowKey]*window // (node, ip) -> connections this minute
 	dgs   map[string]*window
 	dgIPs map[ipWindowKey]*window
