@@ -48,7 +48,7 @@ func Start(ctx context.Context, cfg Config) (*Glue, error) {
 		return nil, fmt.Errorf("control certificate: %w", err)
 	}
 	svc := sites.New(cfg.DB)
-	glue := &Glue{DB: cfg.DB, Sites: svc, Pin: pin, Billing: cfg.Billing}
+	glue := &Glue{DB: cfg.DB, Sites: svc, Pin: pin, Billing: cfg.Billing, Signal: cfg.Signal}
 	glue.probes.interval, glue.probes.delay = cfg.ProbeInterval, cfg.ProbeDelay
 	if glue.probes.interval <= 0 {
 		glue.probes.interval = DefaultProbeInterval
@@ -59,6 +59,9 @@ func Start(ctx context.Context, cfg Config) (*Glue, error) {
 	hc := cfg.Hub
 	hc.Addr, hc.Cert, hc.ServerPK = cfg.Addr, cert, cfg.ServerPK
 	hc.Store, hc.Events, hc.Audit = glue, glue, glue
+	if cfg.Signal != nil {
+		hc.Forwarder = glue
+	}
 	h, err := hub.New(hc)
 	if err != nil {
 		return nil, err
