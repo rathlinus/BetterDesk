@@ -113,11 +113,13 @@ func (g *Gateway) StartVideoSession(ctx context.Context, browserConn *websocket.
 		Payload:   data,
 	}
 
+	// The session is known before the device hears of it: a device that
+	// answers at once must not find it missing
+	g.videoSessions.Store(sessionID, vs)
 	if err := dc.WriteMessage(ctx, msg); err != nil {
+		g.videoSessions.Delete(sessionID)
 		return nil, fmt.Errorf("send video_start to device: %w", err)
 	}
-
-	g.videoSessions.Store(sessionID, vs)
 
 	log.Printf("[cdap] Video session %s started for device %s by %s (q%d @%dfps)",
 		sessionID, deviceID, username, quality, fps)

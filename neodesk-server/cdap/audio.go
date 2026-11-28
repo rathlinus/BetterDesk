@@ -119,11 +119,13 @@ func (g *Gateway) StartAudioSession(ctx context.Context, browserConn *websocket.
 		Payload:   data,
 	}
 
+	// The session is known before the device hears of it: a device that
+	// answers at once must not find it missing
+	g.audioSessions.Store(sessionID, as)
 	if err := dc.WriteMessage(ctx, msg); err != nil {
+		g.audioSessions.Delete(sessionID)
 		return nil, fmt.Errorf("send audio_start to device: %w", err)
 	}
-
-	g.audioSessions.Store(sessionID, as)
 
 	log.Printf("[cdap] Audio session %s started for device %s by %s (codec=%s rate=%d ch=%d dir=%s)",
 		sessionID, deviceID, username, codec, sampleRate, channels, direction)

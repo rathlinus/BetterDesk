@@ -155,11 +155,13 @@ func (g *Gateway) StartFileSession(ctx context.Context, browserConn *websocket.C
 		Payload:   startPayload,
 	}
 
+	// The session is known before the device hears of it: a device that
+	// answers at once must not find it missing
+	g.fileSessions.Store(sessionID, fs)
 	if err := dc.WriteMessage(ctx, msg); err != nil {
+		g.fileSessions.Delete(sessionID)
 		return nil, fmt.Errorf("send file_start to device: %w", err)
 	}
-
-	g.fileSessions.Store(sessionID, fs)
 
 	log.Printf("[cdap] File session %s started for device %s by %s", sessionID, deviceID, username)
 
