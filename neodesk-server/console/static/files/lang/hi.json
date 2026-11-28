@@ -11237,6 +11237,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "आगे भेजे गए डिवाइस",
+    "forwarded_note": "आगे भेजे गए डिवाइस बिना इंटरनेट वाली साइट पर हैं। वे इस सर्वर तक केवल रिले नोड के ज़रिए पहुँचते हैं।",
+    "via_node": "इसके ज़रिए जुड़ता है",
+    "via_node_value": "रिले नोड {name}",
+    "via_node_note": "इसकी साइट पर इंटरनेट नहीं है, इसलिए यह इस सर्वर तक केवल इस रिले नोड के ज़रिए पहुँचता है।"
   }
 }

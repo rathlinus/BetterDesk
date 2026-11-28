@@ -11231,6 +11231,11 @@
     "summary_one_offline": "Sein Relay-Knoten ist offline. Die Sitzungen seiner Geräte laufen über das Relay dieses Servers, bis er wieder da ist.",
     "site_to_site": "Standort zu Standort",
     "site_to_site_note": "Ob sich die Relay-Knoten zweier Standorte erreichen, nach den eigenen Prüfungen der Knoten beim Verbinden und alle fünf Minuten. Eine Sitzung zwischen zwei Standorten läuft über die Knoten beider Standorte, wenn einer den anderen erreicht; sonst über einen Knoten, den beide Geräte erreichen, und sonst über das Relay dieses Servers.",
-    "site_to_site_empty": "Noch keine Prüfungen. Relay-Knoten prüfen die Knoten deiner anderen Standorte beim Verbinden und alle fünf Minuten."
+    "site_to_site_empty": "Noch keine Prüfungen. Relay-Knoten prüfen die Knoten deiner anderen Standorte beim Verbinden und alle fünf Minuten.",
+    "col_forwarded": "Weitergeleitete Geräte",
+    "forwarded_note": "Weitergeleitete Geräte stehen an einem Standort ohne Internetzugang und erreichen diesen Server nur über den Relay-Knoten.",
+    "via_node": "Verbunden über",
+    "via_node_value": "Relay-Knoten {name}",
+    "via_node_note": "Sein Standort hat keinen Internetzugang, daher erreicht es diesen Server nur über diesen Relay-Knoten."
   }
 }

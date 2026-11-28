@@ -12,9 +12,11 @@ import {
 	placementKey,
 	relayLabel,
 	rowOfSentIndex,
+	showsForwarded,
 	siteSummary,
 	siteToSiteRows,
-	sortNodes
+	sortNodes,
+	viaNodeLabel
 } from '../../../src/lib/serverarea/sites.ts';
 
 const node = (over: Partial<RelayNode> = {}): RelayNode => ({
@@ -30,6 +32,7 @@ const node = (over: Partial<RelayNode> = {}): RelayNode => ({
 	active_sessions: 0,
 	bytes_up: 0,
 	bytes_down: 0,
+	forwarded_devices: 0,
 	revoked: false,
 	revoked_at: '',
 	...over
@@ -216,5 +219,32 @@ describe('site to site', () => {
 	test('shows only when two sites have nodes that are not revoked', () => {
 		expect(hasSiteToSite(sites)).toBe(true);
 		expect(hasSiteToSite([sites[0]!, site({ id: 's-c', nodes: [node({ revoked: true })] })])).toBe(false);
+	});
+});
+
+describe('site without internet access', () => {
+	test('the forwarded devices column shows while a working node forwards some', () => {
+		expect(showsForwarded([])).toBe(false);
+		expect(showsForwarded([node({ online: true })])).toBe(false);
+		expect(
+			showsForwarded([node({ online: true }), node({ id: 'b', online: true, forwarded_devices: 3 })])
+		).toBe(true);
+		// An offline or revoked node forwards nothing now, whatever it last said
+		expect(showsForwarded([node({ online: false, forwarded_devices: 3 })])).toBe(false);
+		expect(showsForwarded([node({ online: true, revoked: true, forwarded_devices: 3 })])).toBe(false);
+	});
+
+	test('the relay node a device comes through reads by name, else by id', () => {
+		expect(viaNodeLabel({ id: 'n-7', name: 'depot-rack' })).toEqual({
+			key: 'sites.via_node_value',
+			params: { name: 'depot-rack' }
+		});
+		expect(viaNodeLabel({ id: 'n-7', name: '' })).toEqual({
+			key: 'sites.via_node_value',
+			params: { name: 'n-7' }
+		});
+		expect(viaNodeLabel(null)).toBeNull();
+		expect(viaNodeLabel(undefined)).toBeNull();
+		expect(viaNodeLabel({ id: '', name: '' })).toBeNull();
 	});
 });

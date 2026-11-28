@@ -416,3 +416,23 @@ describe('repeats in what the device reports', () => {
 		expect(within(nics).getAllByText('10.0.0.5')).toHaveLength(2);
 	});
 });
+
+describe('site without internet access', () => {
+	const site = { id: 's-1', name: 'Depot' };
+
+	test('a device that comes through a relay node names the node', async () => {
+		serve(baseDevice({ site, site_source: 'network', via_node: { id: 'n-7', name: 'depot-rack' } }));
+		await openPanel();
+		const label = await screen.findByText('sites.via_node');
+		const fact = label.nextElementSibling as HTMLElement;
+		expect(within(fact).getByText('sites.via_node_value')).toBeInTheDocument();
+		expect(within(fact).getByText('sites.via_node_note')).toBeInTheDocument();
+	});
+
+	test('a device that reaches the server directly shows no relay node', async () => {
+		serve(baseDevice({ site, site_source: 'network', via_node: null }));
+		await openPanel();
+		await screen.findByText('Depot');
+		expect(screen.queryByText('sites.via_node')).toBeNull();
+	});
+});

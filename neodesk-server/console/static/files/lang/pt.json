@@ -11231,6 +11231,11 @@
     "summary_one_offline": "Its relay node is offline. Sessions of its devices use this server's relay until it is back.",
     "site_to_site": "Site to site",
     "site_to_site_note": "Whether the relay nodes of two sites reach each other, from the nodes' own checks when they connect and every five minutes. A session between two sites goes over both sites' nodes when one of them reaches the other; otherwise over one node both devices reach, else over this server's relay.",
-    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes."
+    "site_to_site_empty": "No checks yet. Relay nodes check the nodes of your other sites when they connect and every five minutes.",
+    "col_forwarded": "Dispositivos encaminhados",
+    "forwarded_note": "Os dispositivos encaminhados estão num local sem acesso à internet. Só chegam a este servidor através do nó de retransmissão.",
+    "via_node": "Liga-se através de",
+    "via_node_value": "Nó de retransmissão {name}",
+    "via_node_note": "O seu local não tem acesso à internet, por isso só chega a este servidor através deste nó de retransmissão."
   }
 }

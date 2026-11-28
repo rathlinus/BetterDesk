@@ -3,7 +3,8 @@
   their own relay nodes. The list of sites, and the open site below it
   (?site=<id>): its organization and VPN group, its networks (which
   addresses put a device there), its relay nodes with their state,
-  addresses, sessions and traffic, adding a node (an enrollment string with
+  addresses, sessions and traffic (and the devices a node forwards for a
+  site without internet access), adding a node (an enrollment string with
   install commands), renaming and revoking nodes. Once two sites have
   relay nodes, "Site to site" lists whether their nodes reach each other,
   from the nodes' own probes.
@@ -34,6 +35,7 @@
 		nodeCounts,
 		nodeStatus,
 		openSite,
+		showsForwarded,
 		siteSummary,
 		siteToSiteRows,
 		sortNodes,
@@ -192,12 +194,19 @@
 		}
 	]);
 
+	const nodes = $derived(site ? sortNodes(site.nodes) : []);
+	/* The forwarded devices column, while a node of the open site forwards some */
+	const forwarding = $derived(showsForwarded(nodes));
+
 	const nodeColumns = $derived<Column<RelayNode>[]>([
 		{ id: 'name', label: t('sites.col_node'), cell: nodeNameCell, primary: true },
 		{ id: 'status', label: t('sites.col_status'), cell: nodeStatusCell },
 		{ id: 'addresses', label: t('sites.col_addresses'), cell: nodeAddressCell },
 		{ id: 'sessions', label: t('sites.col_sessions'), cell: nodeSessionsCell, align: 'num' },
 		{ id: 'traffic', label: t('sites.col_traffic'), cell: nodeTrafficCell },
+		...(forwarding
+			? [{ id: 'forwarded', label: t('sites.col_forwarded'), cell: nodeForwardedCell, align: 'num' as const }]
+			: []),
 		...(canEdit
 			? [
 					{
@@ -223,7 +232,6 @@
 			: []
 	);
 
-	const nodes = $derived(site ? sortNodes(site.nodes) : []);
 	const showSiteToSite = $derived(hasSiteToSite(sites) || reach.length > 0);
 	const siteToSite = $derived(siteToSiteRows(sites, reach));
 	const reachColumns = $derived<Column<SiteToSiteRow>[]>([
@@ -316,6 +324,10 @@
 		<span class="muted">–</span>
 	{/if}
 {/snippet}
+
+{#snippet nodeForwardedCell(n: RelayNode)}{n.online && !n.revoked
+		? formatNumber(n.forwarded_devices)
+		: '–'}{/snippet}
 
 {#snippet nodeActionsCell(n: RelayNode)}
 	{#if !n.revoked}
@@ -423,6 +435,7 @@
 							{/if}
 						</div>
 						<p class="section-note">{t('sites.nodes_note')}</p>
+						{#if forwarding}<p class="section-note">{t('sites.forwarded_note')}</p>{/if}
 						<Table
 							rows={nodes}
 							columns={nodeColumns}
