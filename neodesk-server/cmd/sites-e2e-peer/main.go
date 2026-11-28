@@ -252,6 +252,10 @@ func runTarget(server, id, key string) {
 }
 
 func dialRelay(addr, id, key string) (net.Conn, error) {
+	// A relay without a port is on 21117, as the client's check_port has it
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(addr, "21117")
+	}
 	c, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return nil, err
